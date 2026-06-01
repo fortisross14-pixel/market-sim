@@ -39,6 +39,7 @@ export function FinancialsView({ world, hist, borrow, repay }:
           <Row k="− COGS" v={fmtMoney(-I.cogs)} indent />
           <Row k="Contribution" v={fmtMoney(I.contribution)} strong />
           <Row k="− Marketing" v={fmtMoney(-I.marketing)} indent />
+          <Row k="− Brand marketing" v={fmtMoney(-I.brandMarketing)} indent />
           <Row k="− Slotting fees" v={fmtMoney(-I.slotting)} indent />
           <Row k="− Back office" v={fmtMoney(-I.backOffice)} indent />
           <Row k="EBITDA" v={fmtMoney(I.ebitda)} strong />

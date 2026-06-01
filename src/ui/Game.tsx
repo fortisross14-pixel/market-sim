@@ -2,17 +2,23 @@ import React, { useState } from "react";
 import { C, ctrlBtn, fmtMoney, fmtPct } from "./theme";
 import { Stat } from "./components";
 import { Home, SetupWizard } from "./setup/Setup";
-import { ProductCreator, ContractModal } from "./setup/Modals";
+import { ProductCreator, ContractModal, DistributionModal } from "./setup/Modals";
 import { MarketView } from "./views/MarketView";
 import { FinancialsView } from "./views/FinancialsView";
 import { OperationsView, IntelligenceView } from "./views/OpsIntel";
 import { StrategyView } from "./views/StrategyView";
+import { SegmentsView } from "./views/SegmentsView";
+import { BrandView } from "./views/BrandView";
+import { CustomersView } from "./views/CustomersView";
 import { POSITIONINGS } from "../engine/industries";
 import { TICKS_PER_QUARTER } from "../engine/types";
 import { useGame } from "../state/useGame";
 
 const TABS = [
   { id: "market", label: "Market" },
+  { id: "segments", label: "Segments" },
+  { id: "brand", label: "Brand" },
+  { id: "customers", label: "Customers" },
   { id: "financials", label: "Financials" },
   { id: "operations", label: "Operations" },
   { id: "strategy", label: "Strategy" },
@@ -68,14 +74,18 @@ export function Game() {
       </div>
       <div style={{ padding: "16px 20px 40px", borderTop: `1px solid ${C.line}` }}>
         {tab === "market" && <MarketView world={w} hist={hist} selectCell={g.selectCell} />}
+        {tab === "segments" && <SegmentsView world={w} saveSegment={g.saveSegment} deleteSegment={g.deleteSegment} setFocus={g.setFocus} />}
+        {tab === "brand" && <BrandView world={w} setMarketing={g.setMarketing} setBrandMarketing={g.setBrandMarketing} />}
+        {tab === "customers" && <CustomersView world={w} />}
         {tab === "financials" && <FinancialsView world={w} hist={hist} borrow={g.borrow} repay={g.repay} />}
-        {tab === "operations" && <OperationsView world={w} produce={g.produce} openCreator={() => g.setModal("creator")} openContract={() => g.setModal("contract")} removeContract={g.removeContract} setMarketing={g.setMarketing} setBackOffice={g.setBackOffice} setFocus={g.setFocus} />}
+        {tab === "operations" && <OperationsView world={w} produce={g.produce} openCreator={() => g.setModal("creator")} openContract={() => g.setModal("contract")} removeContract={g.removeContract} setMarketing={g.setMarketing} setBackOffice={g.setBackOffice} setFocus={g.setFocus} openDistribution={g.openDistribution} />}
         {tab === "strategy" && <StrategyView world={w} />}
         {tab === "intel" && <IntelligenceView world={w} commission={g.commission} />}
       </div>
 
       {g.modal === "creator" && <ProductCreator world={w} onCreate={g.createProduct} onClose={() => { if (w.player.skus.length > 0) g.setModal(null); }} />}
       {g.modal === "contract" && <ContractModal world={w} onSign={g.signContract} onClose={() => g.setModal(null)} />}
+      {g.modal === "distribution" && <DistributionModal world={w} skuIndex={g.distSku} setPackaging={g.setPackaging} setProductPrice={g.setProductPrice} toggleChannel={g.toggleProductChannel} openContract={() => g.setModal("contract")} onClose={() => g.setModal(null)} />}
     </Shell>
   );
 }

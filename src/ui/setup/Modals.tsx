@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { C, bigBtn, ctrlBtn, fmtMoney } from "../theme";
 import { FieldLabel, TextInput, ChoiceCard, Slider, Seg, Econ } from "../components";
-import { AXES, METHODS, CHANNEL_TYPES } from "../../engine/industries";
+import { AXES, METHODS, CHANNEL_TYPES, PACKAGING, packagingNeedBias } from "../../engine/industries";
 import { deriveUnitCost, deriveQuality, contractReach } from "../../engine/economics";
 import { normAxis, type ProductSpec } from "../../engine/world";
+import { segmentStats } from "../../engine/segments";
 import type { World, ChannelType } from "../../engine/types";
 
 export function ProductCreator({ world, onCreate, onClose }: { world: World; onCreate: (s: ProductSpec) => void; onClose: () => void }) {
@@ -14,13 +15,18 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
   const [materialsQ, setMaterialsQ] = useState(0.5);
   const [productionQ, setProductionQ] = useState(0.5);
   const [online, setOnline] = useState(0.4);
-  const [gAge, setGAge] = useState("25-39");
-  const [gClass, setGClass] = useState("Middle");
-  const [gGender, setGGender] = useState("Female");
-  const [gLeaning, setGLeaning] = useState("Neutral");
+  const [intendedSeg, setIntendedSeg] = useState("");
   const pt = cfg.products.find((p) => p.key === productKey)!;
   const [listPrice, setListPrice] = useState(Math.round((pt.priceBand[0] + pt.priceBand[1]) / 2));
   const [batch, setBatch] = useState(60000);
+  const [attributes, setAttributes] = useState<Record<string, number>>(
+    () => Object.fromEntries(cfg.needs.map((n) => [n.key, pt.defaultAttributes?.[n.key] ?? 0.4]))
+  );
+  // when product type changes, reset attributes to its defaults
+  React.useEffect(() => {
+    const p = cfg.products.find((x) => x.key === productKey)!;
+    setAttributes(Object.fromEntries(cfg.needs.map((n) => [n.key, p.defaultAttributes?.[n.key] ?? 0.4])));
+  }, [productKey]);
 
   const unitCost = deriveUnitCost(pt, method, materialsQ, productionQ);
   const quality = deriveQuality(materialsQ, productionQ);
@@ -42,14 +48,32 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
           <FieldLabel>Product name</FieldLabel>
           <TextInput placeholder="e.g. Daily Glow" value={name} onChange={(e) => setName(e.target.value)} />
           <div style={{ height: 14 }} />
-          <FieldLabel>Who is it for? (target in the cube)</FieldLabel>
-          <div style={{ display: "grid", gap: 8 }}>
-            <Seg label="Age" opts={AXES.age} val={gAge} set={setGAge} />
-            <Seg label="Class" opts={AXES.class} val={gClass} set={setGClass} />
-            <Seg label="Gender" opts={AXES.gender} val={gGender} set={setGGender} />
-            <Seg label="Leaning" opts={AXES.leaning} val={gLeaning} set={setGLeaning} />
-          </div>
-          <div style={{ marginTop: 8, color: C.faint, fontSize: 11 }}>This industry weights: {Object.entries(cfg.axisWeight).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(" · ")}.</div>
+          <FieldLabel>Intended audience (optional — guidance only)</FieldLabel>
+          {world.savedSegments.length === 0 ? (
+            <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, color: C.faint, fontSize: 12, lineHeight: 1.5 }}>
+              No segments created yet. Create a segment (Segments tab) and research it to get advice here. Either way, who actually buys this emerges from its attributes, packaging, price, and channel — you don't target a group directly.
+            </div>
+          ) : (
+            <>
+              <select value={intendedSeg} onChange={(e) => setIntendedSeg(e.target.value)}
+                style={{ width: "100%", background: C.bg, border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, color: C.ink, fontSize: 14 }}>
+                <option value="">— none —</option>
+                {world.savedSegments.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              {intendedSeg && (() => {
+                const seg = world.savedSegments.find((s) => s.id === intendedSeg)!;
+                const researched = world.revealed.market_map;
+                if (!researched) return <div style={{ color: C.faint, fontSize: 11, marginTop: 6 }}>Run a Population Map Scan (Intelligence) to unlock advice for this segment.</div>;
+                const st = segmentStats(world, seg.filter);
+                const topNeeds = Object.entries(st.needPref).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => cfg.needs.find((n) => n.key === k)?.label).join(" & ");
+                return (
+                  <div style={{ background: C.panel2, border: `1px solid ${C.violet}`, borderRadius: 8, padding: 10, marginTop: 6, color: C.dim, fontSize: 11.5, lineHeight: 1.55 }}>
+                    <span style={{ color: C.violet }}>Advice for {seg.name}:</span> they most want <b style={{ color: C.ink }}>{topNeeds}</b>. Avg spend ${st.avgSpend.toFixed(0)}/yr — {st.avgSpend > 250 ? "they'll pay for quality." : "they're price-conscious."} Tune attributes below to match; set channel & packaging after launch in Distribution.
+                  </div>
+                );
+              })()}
+            </>
+          )}
           <div style={{ height: 14 }} />
           <FieldLabel>Production</FieldLabel>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -63,6 +87,13 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
           <Slider label="Materials quality" min={0} max={1} step={.01} value={materialsQ} fmt={(v) => v.toFixed(2)} onChange={setMaterialsQ} />
           <Slider label="Production quality" min={0} max={1} step={.01} value={productionQ} fmt={(v) => v.toFixed(2)} onChange={setProductionQ} />
           <Slider label="Online readiness" min={0} max={1} step={.01} value={online} fmt={(v) => v.toFixed(2)} onChange={setOnline} />
+          <div style={{ height: 6 }} />
+          <FieldLabel>Product attributes (what need it serves)</FieldLabel>
+          {cfg.needs.map((n) => (
+            <Slider key={n.key} label={n.label} min={0} max={1} step={.01} value={attributes[n.key] ?? 0.4} fmt={(v) => v.toFixed(2)}
+              onChange={(v) => setAttributes((a) => ({ ...a, [n.key]: v }))} />
+          ))}
+          <div style={{ color: C.faint, fontSize: 11, marginTop: -4 }}>Different customers want different things. A product can win a demographic on needs — or lose it.</div>
         </div>
         <div>
           <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
@@ -86,10 +117,82 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
       <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <button style={ctrlBtn} onClick={onClose}>Cancel</button>
         <button style={{ ...bigBtn, background: world.brand.color, opacity: (name.trim() && canAfford) ? 1 : .5 }} disabled={!name.trim() || !canAfford}
-          onClick={() => onCreate({ name, productKey, method, materialsQ, productionQ, online, listPrice, batch, gAge: normAxis("age", gAge), gClass: normAxis("class", gClass), gGender: normAxis("gender", gGender), gLeaning: normAxis("leaning", gLeaning) })}>
+          onClick={() => onCreate({ name, productKey, method, materialsQ, productionQ, online, listPrice, batch, gAge: 0.5, gClass: 0.5, gGender: 0.5, gLeaning: 0.5, gGeography: 0.5, gFamily: 0.5, attributes })}>
           Manufacture & launch
         </button>
       </div>
+    </Modal>
+  );
+}
+
+export function DistributionModal({ world, skuIndex, setPackaging, setProductPrice, toggleChannel, openContract, onClose }: {
+  world: World; skuIndex: number;
+  setPackaging: (si: number, pkg: string) => void;
+  setProductPrice: (si: number, price: number) => void;
+  toggleChannel: (si: number, t: ChannelType) => void;
+  openContract: () => void; onClose: () => void;
+}) {
+  const sku = world.player.skus[skuIndex];
+  const pt = world.cfg.products.find((p) => p.key === sku.productKey)!;
+  const availableChannels = Array.from(new Set(world.player.contracts.map((c) => c.type)));
+  return (
+    <Modal onClose={onClose} title={<>Distribution & Sales — <span style={{ color: world.brand.color }}>{sku.name}</span></>} wide>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        <div>
+          <FieldLabel>Packaging</FieldLabel>
+          <div style={{ color: C.faint, fontSize: 11, marginBottom: 8 }}>Packaging shifts who resonates and amplifies certain needs. Pick the vibe.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {PACKAGING.map((pk) => {
+              const on = sku.packaging === pk.key;
+              const bias = packagingNeedBias(world.cfg.id, pk.key);
+              const amp = Object.keys(bias).map((k) => world.cfg.needs.find((n) => n.key === k)?.label).filter(Boolean).join(", ");
+              return (
+                <button key={pk.key} onClick={() => setPackaging(skuIndex, pk.key)}
+                  style={{ textAlign: "left", background: on ? C.panel2 : C.bg, border: `1px solid ${on ? world.brand.color : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
+                  <div style={{ fontWeight: 600, fontSize: 12.5 }}>{pk.label}</div>
+                  <div style={{ color: C.dim, fontSize: 10, marginTop: 2 }}>
+                    {pk.ageLean < -0.2 ? "skews young" : pk.ageLean > 0.2 ? "skews older" : "age-neutral"}{pk.classLean > 0.3 ? " · premium" : pk.classLean < -0.2 ? " · budget" : ""}
+                  </div>
+                  {amp && <div style={{ color: C.violet, fontSize: 10, marginTop: 1 }}>boosts {amp}</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
+            <FieldLabel>Price</FieldLabel>
+            <Slider label="List price" min={pt.priceBand[0]} max={Math.round(pt.priceBand[1] * 1.4)} step={1} value={sku.listPrice} fmt={(v) => `${world.cfg.currency}${v}`} onChange={(v) => setProductPrice(skuIndex, v)} />
+            <Econ k="Margin / unit (pre-retail)" v={`${world.cfg.currency}${(sku.listPrice - sku.unitCost).toFixed(2)}`} color={sku.listPrice > sku.unitCost ? C.green : C.red} />
+          </div>
+          <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14 }}>
+            <FieldLabel>Channels carrying this product</FieldLabel>
+            {availableChannels.length === 0 ? (
+              <div style={{ color: C.faint, fontSize: 12, lineHeight: 1.5 }}>
+                You have no channel contracts yet. <button style={{ ...ctrlBtn, marginTop: 6 }} onClick={openContract}>Negotiate a contract</button>
+              </div>
+            ) : (
+              <>
+                {availableChannels.map((ch) => {
+                  const on = sku.channels.includes(ch);
+                  return (
+                    <div key={ch} onClick={() => toggleChannel(skuIndex, ch)}
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 6, background: on ? C.panel : "transparent", border: `1px solid ${on ? world.brand.color : C.line}`, borderRadius: 8, cursor: "pointer" }}>
+                      <span style={{ color: C.ink, fontSize: 13 }}>{CHANNEL_TYPES[ch].label}</span>
+                      <span style={{ color: on ? world.brand.color : C.faint, fontSize: 12, fontWeight: 600 }}>{on ? "✓ carrying" : "off"}</span>
+                    </div>
+                  );
+                })}
+                <div style={{ color: C.faint, fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
+                  A product only sells through the channels you switch on. If your buyers shop online but you only stock dept stores, you'll underperform — check the Gap study.
+                </div>
+                <button style={{ ...ctrlBtn, marginTop: 8 }} onClick={openContract}>+ Negotiate another channel</button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      <button style={{ ...bigBtn, width: "100%", marginTop: 16 }} onClick={onClose}>Done</button>
     </Modal>
   );
 }

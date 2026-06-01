@@ -6,13 +6,15 @@
 export const TICKS_PER_QUARTER = 24;
 export const TICKS_PER_YEAR = TICKS_PER_QUARTER * 4;
 
-export type AxisKey = "gender" | "age" | "class" | "leaning";
+export type AxisKey = "gender" | "age" | "class" | "leaning" | "geography" | "family";
 
 export interface Coord {
   gender: string;
   age: string;
   class: string;
   leaning: string;
+  geography: string;
+  family: string;
 }
 
 export interface Cell {
@@ -21,6 +23,21 @@ export interface Cell {
   baseHead: number;
   spend: number; // avg annual spend in this industry, $/person/yr
   awareness: Record<string, number>; // productId -> 0..1
+  needPref: Record<string, number>; // need key -> 0..1 preference weight (sums ~1)
+  // rich frozen attributes (set at start, re-rolled only at year-end / events)
+  qualitySens: number; // 0..1: how much this segment rewards quality
+  priceSens: number;   // 0..2: how much a high price repels this segment
+  categoryPref: Record<string, number>; // productType key -> 0..1 affinity (e.g. boys love action figures)
+  channelPref: Record<string, number>; // ChannelType -> 0..1 how much this segment shops there
+  equityPref: Record<string, number>; // brand metric (trust/prestige/value/innovation) -> 0..1 how much this segment cares
+}
+
+export interface NeedAxis {
+  key: string;
+  label: string;
+  // how this need correlates with demographic axes (used to seed cell preferences)
+  // e.g. Luxury correlates positively with class; Value negatively.
+  lean: Partial<Record<AxisKey, number>>; // -1..1 per demographic axis
 }
 
 export interface IndustryConfig {
@@ -36,6 +53,7 @@ export interface IndustryConfig {
   products: ProductType[];
   competitors: CompetitorSeed[];
   thirdAxisLabel: string;
+  needs: NeedAxis[];
 }
 
 export interface ProductType {
@@ -46,6 +64,11 @@ export interface ProductType {
   // natural demographic lean of this product type (cube coords 0..1), optional.
   // If present, fit blends the player's chosen target with the type's lean.
   naturalLean?: Partial<Record<AxisKey, number>>;
+  // default need-attribute vector for this product type (0..1 per need key)
+  defaultAttributes?: Record<string, number>;
+  // who is naturally inclined to this CATEGORY (affinity lean per demographic axis, -1..1).
+  // e.g. action figures: young + male; anti-aging: older. Drives categoryPref per segment.
+  categoryLean?: Partial<Record<AxisKey, number>>;
 }
 
 export interface CompetitorSeed {
@@ -56,6 +79,7 @@ export interface CompetitorSeed {
   priceSens: number;
   strength: number;
   personality?: CompetitorPersonality;
+  attributes: Record<string, number>; // need vector
 }
 
 export type CompetitorPersonality = "discounter" | "premium" | "balanced";
@@ -67,6 +91,8 @@ export interface CompetitorProduct {
   basePrice: number;
   priceSens: number;
   awarenessKey: string; // unique id used in cell.awareness map
+  attributes: Record<string, number>; // need vector
+  productKey: string; // category
 }
 
 export interface Competitor {
@@ -106,6 +132,9 @@ export interface SKU {
   priceSens: number;
   inventory: number; // units in stock
   online: number; // 0..1 online readiness
+  attributes: Record<string, number>; // need vector (0..1 per need key)
+  packaging: string; // packaging preset key
+  channels: ChannelType[]; // which company channels carry THIS product
 }
 
 export type ChannelType = "retail" | "marketplace" | "ownweb" | "flagship";
@@ -142,6 +171,7 @@ export interface IncomeStatement {
   cogs: number;
   contribution: number;
   marketing: number;
+  brandMarketing: number;
   slotting: number;
   backOffice: number;
   ebitda: number;
@@ -195,6 +225,8 @@ export interface PlayerState {
   marketing: number;
   marketingTarget: number;
   marketingFocus: string;
+  brandMarketing: number;        // smoothed current brand-marketing spend
+  brandMarketingTarget: number;  // builds equity, not awareness
   backOffice: number;
   backOfficeTarget: number;
   cash: number;
@@ -244,4 +276,15 @@ export interface World {
   live: LiveSnapshot | null;
   selectedCell: Coord | null;
   selectedInfo: any;
+  // perf: cached static appeal factor (demoFit × needMatch × categoryPref) per "skuId|cellIndex".
+  // recomputed only when products change or segments re-roll, NOT every tick.
+  fitCache: Record<string, number[]>;
+  fitCacheDirty: boolean;
+  savedSegments: import("./segments").SavedSegment[];
+  // brand equity per cell index: { trust, prestige, value, innovation } each 0..1.
+  // distinct from awareness — "what they believe" vs "do they know us". Sparse: only cells we've touched.
+  brandEquity: Record<number, { trust: number; prestige: number; value: number; innovation: number }>;
+  // customer base per cell index: how many people in that segment are "ours", and how satisfied.
+  // Sparse — only cells we've acquired customers in. customers ≤ cell.head.
+  customers: Record<number, { count: number; satisfaction: number }>;
 }

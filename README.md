@@ -47,19 +47,27 @@ src/
 
 The engine is deliberately free of React so it can be unit-tested and reused.
 
-## Current state (v0.5)
+## Current state (v0.10)
 
-Implemented: population cube, awareness-gated share, distribution contracts with
-payment terms, full income statement, working-capital cash flow, contribution
-margin by customer cell, product-type natural demographic lean, full competitor
-AI (invade / defend / escalate / exit with personalities), and **strategy reports**
-— a Strategy tab with a generated quarterly board memo (frames issues as
-questions), SWOT derived from live state, Porter's Five Forces scored as live
-pressure, and a BCG portfolio matrix (Star / Cash Cow / Question Mark / Dog).
+**Customer base + loyalty.** Revenue is no longer an instantaneous share — it's
+driven by a persistent customer *stock* per segment. Each period you acquire new
+customers from the segment's non-customer pool (rate = your appeal share), retain
+most of your existing base, and lose a fraction to churn. Churn is governed by
+**satisfaction** — the absolute quality/value your product delivers to that
+segment plus how you compare to the best rival, lifted by brand trust. Revenue
+comes from repeat purchases by the retained base; satisfied customers buy more and
+spread positive **word-of-mouth** (free acquisition), while a dissatisfied base
+churns out and dampens growth. A Customers tab shows total base, satisfaction, and
+per-segment penetration / churn / lifetime value.
 
-Stubs / next milestones: brand equity (trust/prestige separate from awareness) —
-**Milestone 4**, scenario mode with win conditions — **Milestone 5**,
-own-production factories.
+This makes a won segment an asset you must keep satisfied: neglect it, overprice
+it, or let a rival out-serve it and satisfaction falls, churn rises, and the base
+erodes with momentum. Brand trust now has teeth (it buffers churn), and a happy,
+well-distributed base compounds cheaply.
 
-The strategy reports are deliberately framing tools: they surface tensions and
-pose questions, never prescribe the answer.
+Built on the 648-segment cube, Segment Manager, per-product distribution/packaging
+with Product Diagnosis, brand equity, full competitor AI, and strategy reports.
+
+Next (roadmap order): Capital Allocation + Investments (factories, automation, R&D,
+flagship builds). Also queued: deliberate market growth (category-building
+marketing gated by your share).

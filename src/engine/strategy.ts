@@ -5,7 +5,7 @@
 // ============================================================================
 import type { World, Cell, SKU, AxisKey } from "./types";
 import { AXES, AXIS_KEYS, axisPos, sum, clamp } from "./industries";
-import { fit, effectiveTarget } from "./cube";
+import { fit, effectiveTarget, needMatch } from "./cube";
 
 const coordLabel = (c: { age: string; gender: string; class: string; leaning: string }) =>
   `${c.age} · ${c.gender} · ${c.class} · ${c.leaning}`;
@@ -39,13 +39,16 @@ export function computeSwot(w: World): Swot {
   if (w.player.lostSales > 5000) we.push({ text: `Cumulative lost sales from stock-outs (${num(w.player.lostSales)} units) — production isn't keeping up with demand.`, weight: w.player.lostSales });
   if (w.player.cash < 0) we.push({ text: `Cash is negative (${money(w.player.cash)}) despite the P&L — a classic profit-vs-cash trap.`, weight: 1e9 });
 
-  // OPPORTUNITIES: unserved high-value cells (mini gap analysis, always available in strategy view)
-  const allTargets = [...w.player.skus.map((sk) => skuTarget(w, sk)), ...w.comps.flatMap((c) => c.products.map((p) => p.target))];
+  // OPPORTUNITIES: unserved high-value cells — combined demographic AND need fit
+  const allProducts = [
+    ...w.player.skus.map((sk) => ({ tgt: skuTarget(w, sk), attrs: sk.attributes })),
+    ...w.comps.flatMap((c) => c.products.map((p) => ({ tgt: p.target, attrs: p.attributes }))),
+  ];
   const gaps = w.cube.map((cell) => {
-    const best = allTargets.length ? Math.max(...allTargets.map((tg) => fit(tg, cell, w.cfg))) : 0;
+    const best = allProducts.length ? Math.max(...allProducts.map((p) => fit(p.tgt, cell, w.cfg) * needMatch(p.attrs, cell, w.cfg))) : 0;
     return { cell, market: cell.head * cell.spend, best };
-  }).filter((g) => g.best < 0.45 && g.market > 1_200_000).sort((a, b) => b.market - a.market).slice(0, 3);
-  for (const g of gaps) o.push({ text: `Underserved: ${coordLabel(g.cell.coord)} (${money(g.market)} market, weak fit from anyone).`, weight: g.market });
+  }).filter((g) => g.best < 0.35 && g.market > 1_200_000).sort((a, b) => b.market - a.market).slice(0, 3);
+  for (const g of gaps) o.push({ text: `Underserved: ${coordLabel(g.cell.coord)} (${money(g.market)} market — weak fit on demographics or needs).`, weight: g.market });
 
   // a growing segment is an opportunity
   const growing = w.cube.filter((c) => (c.head - c.baseHead) / c.baseHead > 0.02);
@@ -186,3 +189,23 @@ export function computeBoardMemo(w: World): BoardMemo {
 function money(v: number) { const a = Math.abs(v), s = v < 0 ? "-" : ""; if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`; if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}k`; return `${s}$${a.toFixed(0)}`; }
 function num(v: number) { return v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(0) + "k" : Math.round(v).toString(); }
 function pct(v: number) { return `${(v * 100).toFixed(1)}%`; }
+
+// ---------------------------------------------------------------------------
+// Product Analysis (Release 0.3) — best/worst cells for a product by combined fit.
+// ---------------------------------------------------------------------------
+export interface ProductCellFit { coord: { age: string; gender: string; class: string; leaning: string }; market: number; demoFit: number; needFit: number; combined: number; }
+export interface ProductAnalysis { sku: string; best: ProductCellFit[]; worst: ProductCellFit[]; topNeeds: { label: string; value: number }[]; }
+
+export function computeProductAnalysis(w: World): ProductAnalysis[] {
+  return w.player.skus.map((s) => {
+    const tgt = skuTarget(w, s);
+    const rows: ProductCellFit[] = w.cube.map((cell) => {
+      const demoFit = fit(tgt, cell, w.cfg);
+      const needFit = needMatch(s.attributes, cell, w.cfg);
+      return { coord: cell.coord, market: cell.head * cell.spend, demoFit, needFit, combined: demoFit * needFit };
+    }).filter((r) => r.market > 0);
+    const sorted = [...rows].sort((a, b) => b.combined - a.combined);
+    const topNeeds = w.cfg.needs.map((n) => ({ label: n.label, value: s.attributes[n.key] ?? 0 })).sort((a, b) => b.value - a.value).slice(0, 3);
+    return { sku: s.name, best: sorted.slice(0, 4), worst: sorted.slice(-3).reverse(), topNeeds };
+  });
+}

@@ -8,7 +8,7 @@
 import type { World, Competitor, Cell, AxisKey, CompetitorProduct } from "./types";
 import { TICKS_PER_QUARTER } from "./types";
 import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum } from "./industries";
-import { fit, effectiveTarget } from "./cube";
+import { fit, effectiveTarget, needMatch } from "./cube";
 
 const REF_PRICE = 45;
 const coordKey = (c: Cell) => `${c.coord.gender}|${c.coord.age}|${c.coord.class}|${c.coord.leaning}`;
@@ -20,11 +20,12 @@ function playerTargets(w: World) {
   });
 }
 
-function appealOf(target: Record<AxisKey, number>, quality: number, price: number, priceSens: number, awareness: number, cell: Cell, cfg: World["cfg"]) {
+function appealOf(target: Record<AxisKey, number>, attributes: Record<string, number>, quality: number, price: number, priceSens: number, awareness: number, cell: Cell, cfg: World["cfg"]) {
   const f = fit(target, cell, cfg);
+  const nm = needMatch(attributes, cell, cfg);
   const priceTerm = 1 - clamp(price / REF_PRICE - 1, -0.6, 0.9) * priceSens * 0.5;
   const qTerm = 0.5 + 0.5 * quality;
-  return Math.max(0, f * qTerm * priceTerm) * awareness;
+  return Math.max(0, f * nm * qTerm * priceTerm) * awareness;
 }
 
 interface CellAssessment {
@@ -38,12 +39,12 @@ function assessCells(w: World, comp: Competitor): CellAssessment[] {
     const market = cell.head * cell.spend;
     if (market <= 0) continue;
     const playerEff = w.player.skus.map((s, i) =>
-      appealOf(pts[i], s.quality, s.listPrice, s.priceSens, (cell.awareness[s.id] ?? 0) * 0.7, cell, w.cfg));
+      appealOf(pts[i], s.attributes, s.quality, s.listPrice, s.priceSens, (cell.awareness[s.id] ?? 0) * 0.7, cell, w.cfg));
     const allCompEff: number[] = [];
     let myEff = 0, myBestFit = 0;
     for (const c of w.comps) {
       for (const cp of c.products) {
-        const e = appealOf(cp.target, cp.quality, cp.price, cp.priceSens, cell.awareness[cp.awarenessKey] ?? 0, cell, w.cfg);
+        const e = appealOf(cp.target, cp.attributes, cp.quality, cp.price, cp.priceSens, cell.awareness[cp.awarenessKey] ?? 0, cell, w.cfg);
         allCompEff.push(e);
         if (c.id === comp.id) { myEff += e; myBestFit = Math.max(myBestFit, fit(cp.target, cell, w.cfg)); }
       }
@@ -85,6 +86,11 @@ function decide(w: World, comp: Competitor) {
     const downmarket = cell.coord.class === "Budget";
     if (!(comp.personality === "premium" && downmarket)) {
       const target = cellCoordTarget(cell);
+      // build attributes that mirror the cell's top need preferences — a real threat
+      const attrs: Record<string, number> = {};
+      const prefs = Object.entries(cell.needPref).sort((a, b) => b[1] - a[1]);
+      w.cfg.needs.forEach((n) => { attrs[n.key] = 0.2; });
+      prefs.slice(0, 2).forEach(([k]) => { attrs[k] = 0.85; });
       const np: CompetitorProduct = {
         target,
         quality: clamp(comp.quality + (Math.random() * 0.1 - 0.05)),
@@ -92,6 +98,8 @@ function decide(w: World, comp: Competitor) {
         basePrice: comp.basePrice,
         priceSens: comp.priceSens,
         awarenessKey: `${comp.id}_p${comp.products.length}`,
+        attributes: attrs,
+        productKey: comp.products[0]?.productKey ?? w.cfg.products[0].key,
       };
       for (const c of w.cube) c.awareness[np.awarenessKey] = 0.05;
       comp.products.push(np);

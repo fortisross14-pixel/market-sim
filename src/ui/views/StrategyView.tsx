@@ -1,7 +1,7 @@
 import React from "react";
 import { C, fmtMoney, fmtPct } from "../theme";
 import { Panel } from "../components";
-import { computeSwot, computePorter, computeBcg, computeBoardMemo, type BcgClass } from "../../engine/strategy";
+import { computeSwot, computePorter, computeBcg, computeBoardMemo, computeProductAnalysis, type BcgClass } from "../../engine/strategy";
 import type { World } from "../../engine/types";
 
 export function StrategyView({ world }: { world: World }) {
@@ -57,6 +57,22 @@ export function StrategyView({ world }: { world: World }) {
 
       <Panel title="Portfolio — BCG Matrix">
         {bcg.length === 0 ? <div style={{ color: C.faint, fontSize: 13 }}>No products yet.</div> : <BcgMatrix items={bcg} brandColor={world.brand.color} />}
+      </Panel>
+
+      <Panel title="Product Analysis — where each product fits">
+        {world.player.skus.length === 0 ? <div style={{ color: C.faint, fontSize: 13 }}>No products yet.</div> :
+          computeProductAnalysis(world).map((pa, i) => (
+            <div key={i} style={{ marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${C.grid}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                <span style={{ color: world.brand.color, fontWeight: 600 }}>{pa.sku}</span>
+                <span style={{ color: C.dim, fontSize: 11 }}>serves: {pa.topNeeds.map((n) => `${n.label} ${(n.value * 100).toFixed(0)}`).join(" · ")}</span>
+              </div>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <FitList title="Best-fit segments" color={C.green} rows={pa.best} />
+                <FitList title="Worst-fit segments" color={C.red} rows={pa.worst} />
+              </div>
+            </div>
+          ))}
       </Panel>
     </div>
   );
@@ -126,3 +142,24 @@ function BcgMatrix({ items, brandColor }: { items: ReturnType<typeof computeBcg>
   );
 }
 const classColor = (k: BcgClass) => k === "Star" ? C.green : k === "Cash Cow" ? C.cyan : k === "Question Mark" ? C.amber : C.faint;
+
+function FitList({ title, color, rows }: { title: string; color: string; rows: { coord: any; market: number; demoFit: number; needFit: number; combined: number }[] }) {
+  return (
+    <div style={{ flex: "1 1 240px" }}>
+      <div style={{ color, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }}>{title}</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead><tr style={{ color: C.faint, textAlign: "right" }}><th style={{ textAlign: "left" }}>Segment</th><th>Demo</th><th>Need</th><th>Fit</th></tr></thead>
+        <tbody style={{ fontFamily: "ui-monospace" }}>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ textAlign: "right" }}>
+              <td style={{ textAlign: "left", color: C.ink, padding: "2px 0" }}>{r.coord.age} {r.coord.class.slice(0, 3)} {r.coord.gender.slice(0, 1)}</td>
+              <td style={{ color: C.dim }}>{(r.demoFit * 100).toFixed(0)}</td>
+              <td style={{ color: C.dim }}>{(r.needFit * 100).toFixed(0)}</td>
+              <td style={{ color }}>{(r.combined * 100).toFixed(0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

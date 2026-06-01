@@ -1,31 +1,37 @@
 import React from "react";
 import { C, bigBtn, ctrlBtn, fmtMoney, fmtNum, fmtPct } from "../theme";
 import { Panel, Slider, FieldLabel } from "../components";
-import { AXES, CHANNEL_TYPES } from "../../engine/industries";
+import { AXES, CHANNEL_TYPES, PACKAGING } from "../../engine/industries";
 import { contractReach } from "../../engine/economics";
 import { STUDY_DEFS } from "../../engine/world";
 import { TICKS_PER_QUARTER } from "../../engine/types";
 import type { World } from "../../engine/types";
 
-export function OperationsView({ world, produce, openCreator, openContract, removeContract, setMarketing, setBackOffice, setFocus }: {
+export function OperationsView({ world, produce, openCreator, openContract, removeContract, setMarketing, setBackOffice, setFocus, openDistribution }: {
   world: World; produce: (si: number, qty: number) => void; openCreator: () => void; openContract: () => void;
   removeContract: (i: number) => void; setMarketing: (v: number) => void; setBackOffice: (v: number) => void; setFocus: (v: string) => void;
+  openDistribution: (si: number) => void;
 }) {
   return (
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
       <Panel title="Products" style={{ flex: "1 1 340px" }}>
         {world.player.skus.length === 0 && <div style={{ color: C.faint, marginBottom: 12 }}>No products yet.</div>}
         {world.player.skus.map((sku, si) => {
-          const ageLabel = AXES.age[Math.round(sku.target.age * (AXES.age.length - 1))];
-          const classLabel = AXES.class[Math.round(sku.target.class * (AXES.class.length - 1))];
+          const pkgLabel = PACKAGING.find((p) => p.key === sku.packaging)?.label ?? sku.packaging;
+          const chCount = sku.channels.length;
           return (
             <div key={si} style={{ marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${C.grid}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ color: world.brand.color, fontWeight: 600 }}>{sku.name}</span>
                 <span style={{ color: sku.inventory < 1 ? C.red : C.dim, fontSize: 11, fontFamily: "ui-monospace" }}>stock {fmtNum(sku.inventory)}</span>
               </div>
-              <div style={{ color: C.faint, fontSize: 11, margin: "2px 0 6px" }}>targets {ageLabel} · {classLabel} · ${sku.listPrice} · q{sku.quality.toFixed(2)}</div>
-              <button style={{ ...ctrlBtn, background: world.brand.color, color: "#06121c" }} onClick={() => produce(si, 60000)}>+ Make 60k ({fmtMoney(60000 * sku.unitCost)})</button>
+              <div style={{ color: C.faint, fontSize: 11, margin: "2px 0 6px" }}>
+                ${sku.listPrice} · q{sku.quality.toFixed(2)} · {pkgLabel} · {chCount === 0 ? <span style={{ color: C.red }}>not distributed</span> : `${chCount} channel${chCount > 1 ? "s" : ""}`}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={{ ...ctrlBtn, background: world.brand.color, color: "#06121c", flex: 1 }} onClick={() => produce(si, 60000)}>+ Make 60k ({fmtMoney(60000 * sku.unitCost)})</button>
+                <button style={{ ...ctrlBtn, flex: 1 }} onClick={() => openDistribution(si)}>Distribution / Sales</button>
+              </div>
             </div>
           );
         })}
@@ -48,11 +54,19 @@ export function OperationsView({ world, produce, openCreator, openContract, remo
         <button style={{ ...bigBtn, background: C.panel2, color: C.ink, border: `1px solid ${C.line}`, width: "100%", marginTop: 10 }} onClick={openContract}>+ Negotiate contract</button>
         <div style={{ height: 16 }} />
         <FieldLabel>Marketing focus</FieldLabel>
-        <div style={{ display: "flex", gap: 3, background: C.panel2, borderRadius: 7, padding: 3, flexWrap: "wrap", marginBottom: 12 }}>
-          {["all", ...AXES.age].map((o) => (
-            <button key={o} onClick={() => setFocus(o)} style={{ background: world.player.marketingFocus === o ? C.cyan : "transparent", color: world.player.marketingFocus === o ? "#06121c" : C.dim, border: "none", borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{o === "all" ? "All" : o}</button>
-          ))}
-        </div>
+        {world.player.marketingFocus.startsWith("seg:") ? (
+          <div style={{ background: C.panel2, border: `1px solid ${C.cyan}`, borderRadius: 7, padding: "6px 10px", marginBottom: 12, fontSize: 12, color: C.cyan, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Targeting: {world.savedSegments.find((s) => "seg:" + s.id === world.player.marketingFocus)?.name ?? "segment"}</span>
+            <button style={ctrlBtn} onClick={() => setFocus("all")}>clear</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 3, background: C.panel2, borderRadius: 7, padding: 3, flexWrap: "wrap", marginBottom: 6 }}>
+            {["all", ...AXES.age].map((o) => (
+              <button key={o} onClick={() => setFocus(o)} style={{ background: world.player.marketingFocus === o ? C.cyan : "transparent", color: world.player.marketingFocus === o ? "#06121c" : C.dim, border: "none", borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{o === "all" ? "All" : o}</button>
+            ))}
+          </div>
+        )}
+        {!world.player.marketingFocus.startsWith("seg:") && <div style={{ color: C.faint, fontSize: 11, marginBottom: 12 }}>Or target a saved segment in the Segments tab.</div>}
         <Slider label="Marketing / promotion (per Q)" min={20000} max={400000} step={5000} value={world.player.marketingTarget} fmt={fmtMoney} onChange={setMarketing} />
         <Slider label="Back-office overhead" min={40000} max={300000} step={5000} value={world.player.backOfficeTarget} fmt={fmtMoney} onChange={setBackOffice} />
       </Panel>
@@ -100,6 +114,21 @@ export function IntelligenceView({ world, commission }: { world: World; commissi
               <div style={{ borderTop: `1px solid ${C.grid}`, margin: "6px 0" }} />
               {world.revealed.competitor_benchmark.you.map((r: any, i: number) => <div key={i} style={{ color: C.cyan }}>{r.name}: ${r.price} · cost ${r.unitCost} · {(r.margin * 100).toFixed(0)}%</div>)}
             </div>
+          </Report>
+        )}
+        {world.revealed.product_diagnosis && (
+          <Report title="Product Diagnosis">
+            {world.revealed.product_diagnosis.diagnoses.length === 0
+              ? <div style={{ color: C.faint, fontSize: 13 }}>No products to diagnose.</div>
+              : world.revealed.product_diagnosis.diagnoses.map((d: any, i: number) => (
+                <div key={i} style={{ fontSize: 12.5, lineHeight: 1.5, padding: "6px 0", borderBottom: i < world.revealed.product_diagnosis.diagnoses.length - 1 ? `1px solid ${C.grid}` : "none" }}>
+                  <span style={{ color: d.verdict === "mismatch" ? C.amber : d.verdict === "weak" ? C.red : C.green }}>
+                    {d.verdict === "mismatch" ? "⚠ " : d.verdict === "weak" ? "✕ " : "✓ "}
+                  </span>
+                  <span style={{ color: C.ink }}>{d.message}</span>
+                </div>
+              ))}
+            <div style={{ color: C.faint, fontSize: 11, marginTop: 8 }}>Re-run after changing packaging or channels to see if the gap closed.</div>
           </Report>
         )}
       </Panel>
