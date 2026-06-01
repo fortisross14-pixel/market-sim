@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { C, bigBtn, ctrlBtn, fmtMoney } from "../theme";
 import { FieldLabel, TextInput, ChoiceCard, Slider, Seg, Econ } from "../components";
-import { AXES, METHODS, CHANNEL_TYPES, PACKAGING, packagingNeedBias } from "../../engine/industries";
+import { AXES, METHODS, CHANNEL_TYPES, PACKAGING, packagingNeedBias, LICENSES } from "../../engine/industries";
 import { deriveUnitCost, deriveQuality, contractReach } from "../../engine/economics";
 import { normAxis, type ProductSpec } from "../../engine/world";
 import { segmentStats } from "../../engine/segments";
@@ -125,10 +125,11 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
   );
 }
 
-export function DistributionModal({ world, skuIndex, setPackaging, setProductPrice, toggleChannel, openContract, onClose }: {
+export function DistributionModal({ world, skuIndex, setPackaging, setProductPrice, setLicense, toggleChannel, openContract, onClose }: {
   world: World; skuIndex: number;
   setPackaging: (si: number, pkg: string) => void;
   setProductPrice: (si: number, price: number) => void;
+  setLicense: (si: number, key: string | null) => void;
   toggleChannel: (si: number, t: ChannelType) => void;
   openContract: () => void; onClose: () => void;
 }) {
@@ -190,6 +191,32 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
               </>
             )}
           </div>
+        </div>
+      </div>
+      {/* Licensing */}
+      <div style={{ marginTop: 16 }}>
+        <FieldLabel>Licensing — attach a brand license to this product</FieldLabel>
+        <div style={{ color: C.faint, fontSize: 11, marginBottom: 8 }}>A license boosts the "licensed" and "collectible" appeal — huge for toys, modest for skincare. Costs an annual fee + per-unit royalty.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+          <button onClick={() => setLicense(skuIndex, null)}
+            style={{ textAlign: "left", background: !sku.license ? C.panel2 : C.bg, border: `1px solid ${!sku.license ? world.brand.color : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
+            <div style={{ fontWeight: 600, fontSize: 12 }}>No license</div>
+            <div style={{ color: C.dim, fontSize: 10 }}>Save on royalties</div>
+          </button>
+          {LICENSES.map((lic) => {
+            const on = sku.license === lic.key;
+            const cm = lic.categoryMult[world.cfg.id] ?? 1;
+            return (
+              <button key={lic.key} onClick={() => setLicense(skuIndex, lic.key)}
+                style={{ textAlign: "left", background: on ? C.panel2 : C.bg, border: `1px solid ${on ? world.brand.color : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>{lic.label}</div>
+                <div style={{ color: C.dim, fontSize: 10 }}>{lic.tier} · {fmtMoney(lic.annualFee)}/yr + ${lic.unitRoyalty.toFixed(2)}/unit</div>
+                <div style={{ color: cm > 1 ? C.green : cm < 0.5 ? C.red : C.dim, fontSize: 10 }}>
+                  {cm > 1.3 ? "strong fit" : cm > 0.8 ? "moderate fit" : "weak fit"} for {world.cfg.label}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
       <button style={{ ...bigBtn, width: "100%", marginTop: 16 }} onClick={onClose}>Done</button>

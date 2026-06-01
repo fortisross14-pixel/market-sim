@@ -1,5 +1,5 @@
 import type { Cell, IndustryConfig, AxisKey, World, ProductType, Coord } from "./types";
-import { AXES, AXIS_KEYS, axisPos, clamp, ease, PACKAGING, packagingNeedBias } from "./industries";
+import { AXES, AXIS_KEYS, axisPos, clamp, ease, PACKAGING, packagingNeedBias, LICENSES } from "./industries";
 
 // deterministic small jitter per cell+need so "surprises within the trend" are stable across ticks
 function jitter(seed: string): number {
@@ -126,10 +126,20 @@ export function packagingResonance(pkgKey: string, cell: Cell): number {
 }
 
 // Packaging-amplified attributes: needBias multiplies the perceived need attributes.
-export function effectiveAttributes(industryId: string, pkgKey: string, attributes: Record<string, number>): Record<string, number> {
+export function effectiveAttributes(industryId: string, pkgKey: string, attributes: Record<string, number>, licenseKey?: string | null): Record<string, number> {
   const bias = packagingNeedBias(industryId, pkgKey);
   const out: Record<string, number> = { ...attributes };
   for (const k in bias) out[k] = clamp((out[k] ?? 0) * bias[k], 0, 1);
+  // license boosts "licensed" and "collectible" attributes proportional to pull × category relevance
+  if (licenseKey) {
+    const lic = LICENSES.find((l) => l.key === licenseKey);
+    if (lic) {
+      const cm = lic.categoryMult[industryId] ?? 1;
+      const boost = lic.pull * cm;
+      out["licensed"] = clamp((out["licensed"] ?? 0) + boost, 0, 1);
+      out["collectible"] = clamp((out["collectible"] ?? 0) + boost * 0.5, 0, 1);
+    }
+  }
   return out;
 }
 

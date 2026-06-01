@@ -57,7 +57,11 @@ most of your existing base, and lose a fraction to churn. Churn is governed by
 segment plus how you compare to the best rival, lifted by brand trust. Revenue
 comes from repeat purchases by the retained base; satisfied customers buy more and
 spread positive **word-of-mouth** (free acquisition), while a dissatisfied base
-churns out and dampens growth. A Customers tab shows total base, satisfaction, and
+churns out and dampens growth. Word-of-mouth lifts awareness in the customer's own
+segment and spills, with a smaller effect, into demographically adjacent segments.
+This is the first system with real hysteresis — a quality cut or price hike churns
+the base gradually over quarters rather than instantly, so actions carry lagged,
+lasting consequences. A Customers tab shows total base, satisfaction, and
 per-segment penetration / churn / lifetime value.
 
 This makes a won segment an asset you must keep satisfied: neglect it, overprice

@@ -7,6 +7,15 @@ import { TICKS_PER_QUARTER } from "../../engine/types";
 import type { World } from "../../engine/types";
 
 export function CustomersView({ world }: { world: World }) {
+  if (world.player.intelDept < 1) {
+    return (
+      <Panel title="Customer Base">
+        <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
+          You need at least a small Market Intelligence team to see customer data. Hire one in Operations → Departments.
+        </div>
+      </Panel>
+    );
+  }
   const totals = customerTotals(world);
   const hasBase = totals.total > 0;
 
@@ -24,7 +33,7 @@ export function CustomersView({ world }: { world: World }) {
       ltvW += cellLTV(world, i, world.cube[i].spend) * cc.count;
     }
     const sat = count > 0 ? satW / count : 0;
-    const churnAnnual = Math.min(0.95, (0.015 + (0.72 - sat) * 0.14) * TICKS_PER_QUARTER * 4);
+    const churnAnnual = Math.min(0.97, Math.max(0.01, (0.02 + (0.7 - sat) * 0.28)) * TICKS_PER_QUARTER * 4);
     return { name: seg.name, count, sat, penetration: pop > 0 ? count / pop : 0, ltv: count > 0 ? ltvW / count : 0, churn: count > 0 ? churnAnnual : 0 };
   });
 

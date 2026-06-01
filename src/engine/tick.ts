@@ -1,16 +1,17 @@
 import type {
   World, Cell, SKU, Competitor, CellFinance, IncomeStatement, CashFlow, SkuResult,
 } from "./types";
-import { TICKS_PER_QUARTER } from "./types";
-import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum, CHANNEL_TYPES } from "./industries";
+import { TICKS_PER_QUARTER, TICK_RATE_SCALE, TICKS_PER_MONTH, TICKS_PER_YEAR, DEPT_TIERS } from "./types";
+import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum, CHANNEL_TYPES, LICENSES } from "./industries";
 import { fit, effectiveTarget, applyDriftAndShocks, needMatch, effectiveAttributes, packagingResonance, channelFit } from "./cube";
 import { contractReach } from "./economics";
 import { runCompetitorBrains, competitorAwareness } from "./competitorBrain";
 import { cellsInSegment } from "./segments";
-import { earnedSignals, updateEquity, equityDemandMult, pricingPower, trustAwarenessLift } from "./brandEquity";
-import { satisfactionTarget, updateCustomers } from "./customers";
+import { earnedSignals, updateEquity, equityDemandMult, pricingPower, trustAwarenessLift, getEquity } from "./brandEquity";
+import { satisfactionTarget, updateCustomers, applyWordOfMouthSpillover, buildAdjacency } from "./customers";
 
 const REF_PRICE = 45;
+let adjacencyCache: { size: number; adj: Record<number, number[]> } | null = null;
 const cellKey = (c: { coord: { gender: string; age: string; class: string; leaning: string; geography: string; family: string } }) =>
   `${c.coord.gender}|${c.coord.age}|${c.coord.class}|${c.coord.leaning}|${c.coord.geography}|${c.coord.family}`;
 
@@ -60,7 +61,7 @@ export function step(w: World): World {
     for (const p of w.player.skus) {
       const arr = new Array(w.cube.length);
       const tgt = skuEffectiveTarget(w, p);
-      const effAttrs = effectiveAttributes(cfg.id, p.packaging, p.attributes);
+      const effAttrs = effectiveAttributes(cfg.id, p.packaging, p.attributes, p.license);
       for (let ci = 0; ci < w.cube.length; ci++) {
         const cell = w.cube[ci];
         const cat = cell.categoryPref[p.productKey] ?? 0.5;
@@ -81,6 +82,22 @@ export function step(w: World): World {
   // for marketing allocation by cell: track awareness-weighted exposure
   const skuCellRev: number[][] = w.player.skus.map(() => []);
 
+  // perceived quality eases toward actual quality, but a large existing customer base ANCHORS the
+  // old reputation — so raising quality on a popular product moves perception slowly (the inertia
+  // Oscar described: 0.1→0.5 actual lands perception in the middle for a while). New/small products
+  // adopt their true quality fast; established ones are sticky (which is also why leveraging a known
+  // product can beat launching fresh — its perception, once earned, is durable).
+  {
+    const totalCust = (() => { let t = 0; for (const k in w.customers) t += w.customers[k].count; return t; })();
+    for (const p of w.player.skus) {
+      // anchoring 0..~0.85 based on how big the base is (200k customers ≈ heavily anchored)
+      const anchor = clamp(totalCust / 250000, 0, 0.85);
+      const baseRate = 0.02 * TICK_RATE_SCALE;       // fast when unknown
+      const rate = baseRate * (1 - anchor) + 0.0015 * TICK_RATE_SCALE; // floor so it always drifts
+      p.perceivedQuality = clamp(p.perceivedQuality + (p.quality - p.perceivedQuality) * rate, 0, 1);
+    }
+  }
+
   for (let ci = 0; ci < w.cube.length; ci++) {
     const cell = w.cube[ci];
     const cellMarket = cell.head * cell.spend;
@@ -96,16 +113,19 @@ export function step(w: World): World {
     const hasCustomers = (w.customers[ci]?.count ?? 0) > 1;
     if (maxStatic < 0.02 && !isSelected && !hasCustomers) continue; // dormant — no fit, no base, not selected
 
-    // brand equity: update it here (this is a cell we're active in), then read its effects.
+    // brand equity: update per CATEGORY for each product type the player has
     const brandFocusMatch = focusCellKeys
       ? (focusCellKeys.has(cellKey(cell)) ? 1.2 : 0.15)
       : (w.player.marketingFocus === "all" || cell.coord.age === w.player.marketingFocus) ? 1 : 0.5;
-    updateEquity(w, ci, brandPower, brandFocusMatch, equitySignals);
-    const eqDemand = equityDemandMult(w, ci, cell); // demand shift
-    const eqPricePower = pricingPower(w, ci);       // softens price penalty
-    const eqAwareLift = trustAwarenessLift(w, ci);  // raises awareness ceiling
+    const seenCats = new Set<string>();
+    for (const p of w.player.skus) {
+      if (!seenCats.has(p.productKey)) {
+        seenCats.add(p.productKey);
+        updateEquity(w, ci, p.productKey, brandPower, brandFocusMatch, equitySignals);
+      }
+    }
 
-    // update player awareness (ramp from 0), ceiling tied to fit & distribution presence
+    // update player awareness — equity effects are now per-product (per-category)
     for (let i = 0; i < w.player.skus.length; i++) {
       const p = w.player.skus[i];
       const fStatic = w.fitCache[p.id]?.[ci] ?? 0;
@@ -114,11 +134,14 @@ export function step(w: World): World {
         ? (focusCellKeys.has(cellKey(cell)) ? 1.2 : 0.15)
         : (w.player.marketingFocus === "all" || cell.coord.age === w.player.marketingFocus) ? 1 : 0.3;
       const distPresence = totalReach * 0.6 + onlineCoverage * onlineFit * 0.4;
-      // concentration: narrower focus (fewer cells) pushes a higher ceiling per targeted cell.
       const focusLift = 1 + marketingPower * (focusMatch - 1) * 0.6 * concentrationBoost;
-      const push = clamp(fStatic * (0.35 + 0.65 * distPresence) * Math.max(0.2, focusLift) * eqAwareLift);
-      const speed = clamp(0.010 * (0.3 + marketingPower * focusMatch + 0.6 * awarenessBoost));
+      const eqAwareLift = trustAwarenessLift(w, ci, p.productKey);
+      const mktgCeil = 0.4 + 0.6 * clamp(marketingPower * focusMatch, 0, 1);
+      const push = clamp(fStatic * (0.35 + 0.65 * distPresence) * Math.max(0.2, focusLift) * eqAwareLift * mktgCeil);
       const cur = cell.awareness[p.id] || 0;
+      const speed = push >= cur
+        ? clamp(0.010 * TICK_RATE_SCALE * (0.3 + marketingPower * focusMatch + 0.6 * awarenessBoost))
+        : 0.012 * TICK_RATE_SCALE;
       cell.awareness[p.id] = clamp(cur + (push - cur) * speed);
     }
 
@@ -128,10 +151,12 @@ export function step(w: World): World {
     // effective appeal. Static factor (fit×need×category) is cached; price & quality-sensitivity are live.
     const playerEff = w.player.skus.map((p, i) => {
       const fStatic = w.fitCache[p.id]?.[ci] ?? 0;
-      // prestige softens the price penalty (pricing power): a premium brand is forgiven a high price.
+      // per-category equity effects
+      const eqDemand = equityDemandMult(w, ci, cell, p.productKey);
+      const eqPricePower = pricingPower(w, ci, p.productKey);
       const effPriceSens = cell.priceSens * (1 - eqPricePower);
       const priceTerm = 1 - clamp(p.listPrice / REF_PRICE - 1, -0.6, 0.9) * effPriceSens * 0.5;
-      const qTerm = 1 - cell.qualitySens + cell.qualitySens * p.quality;
+      const qTerm = 1 - cell.qualitySens + cell.qualitySens * p.perceivedQuality;
       const aware = (cell.awareness[p.id] ?? 0) * (0.4 + 0.6 * totalReach);
       return Math.max(0, fStatic * qTerm * priceTerm * eqDemand) * aware;
     });
@@ -155,7 +180,7 @@ export function step(w: World): World {
     const playerAppeal = sum(playerEff);
     const acquireShare = playerAppeal / denom;          // our pull vs the whole field
     const bestRival = compEff.length ? Math.max(...compEff) : 0;
-    const trust = (w.brandEquity[ci]?.trust) ?? 0;
+    const trust = getEquity(w, ci).trust;
     // absolute experience: how good our products actually are for this segment (quality + price fairness),
     // weighted by our appeal mix. A bad/overpriced product dissatisfies even with no competitor present.
     let qualityValue = 0.5;
@@ -163,7 +188,7 @@ export function step(w: World): World {
       let acc = 0;
       w.player.skus.forEach((p, i) => {
         const wgt = playerEff[i] / playerAppeal;
-        const qExp = 1 - cell.qualitySens + cell.qualitySens * p.quality;       // perceived quality
+        const qExp = 1 - cell.qualitySens + cell.qualitySens * p.perceivedQuality;       // perceived quality
         const fair = clamp(1 - clamp(p.listPrice / REF_PRICE - 1, -0.5, 1.2) * cell.priceSens * 0.4, 0.1, 1.2); // price fairness
         acc += wgt * clamp(qExp * fair, 0, 1);
       });
@@ -211,6 +236,33 @@ export function step(w: World): World {
     }
   }
 
+  // word-of-mouth spillover to adjacent segments (cheap: iterates only cells with customers)
+  if (!adjacencyCache || adjacencyCache.size !== w.cube.length) {
+    adjacencyCache = { size: w.cube.length, adj: buildAdjacency(w) };
+  }
+  applyWordOfMouthSpillover(w, adjacencyCache.adj);
+
+  // ---- active campaigns: time-limited, segment-targeted awareness boosts ----
+  for (const camp of w.activeCampaigns) {
+    if (camp.daysRemaining <= 0) continue;
+    const seg = w.savedSegments.find((s) => s.id === camp.segmentId);
+    if (!seg) { camp.daysRemaining = 0; continue; }
+    const campCells = cellsInSegment(w, seg.filter);
+    const dailySpend = camp.budget / camp.totalDays;
+    const campPower = clamp(dailySpend / 8000, 0, 1.5); // $8k/day ≈ full power
+    for (const cell of campCells) {
+      for (const p of w.player.skus) {
+        const fStatic = w.fitCache[p.id]?.[w.cube.indexOf(cell)] ?? 0;
+        if (fStatic < 0.02) continue;
+        const boost = clamp(0.006 * TICK_RATE_SCALE * campPower * fStatic, 0, 0.02);
+        cell.awareness[p.id] = clamp((cell.awareness[p.id] ?? 0) + boost, 0, 1);
+      }
+    }
+    w.player.cash -= dailySpend;
+    camp.daysRemaining -= 1;
+  }
+  w.activeCampaigns = w.activeCampaigns.filter((c) => c.daysRemaining > 0);
+
   // allocate marketing to cells proportional to revenue (CAC by cell)
   const totalCellRev = sum(cellFinance.map((c) => c.revenue)) || 1;
   for (const cf of cellFinance) {
@@ -226,17 +278,21 @@ export function step(w: World): World {
     ? sum(contracts.map((c) => CHANNEL_TYPES[c.type].paymentDays * contractReach(c))) / (sum(contracts.map(contractReach)) || 1)
     : 30;
 
-  let grossRevenue = 0, cogs = 0, totalUnits = 0, lostTick = 0;
+  let grossRevenue = 0, cogs = 0, totalUnits = 0, lostTick = 0, actualUnitsTick = 0;
   const skuResults: SkuResult[] = w.player.skus.map((sku, i) => {
     const demandTick = skuUnitsAnnual[i] / (TICKS_PER_QUARTER * 4);
     const sold = Math.min(demandTick, sku.inventory);
     sku.inventory = Math.max(0, sku.inventory - sold);
     lostTick += Math.max(0, demandTick - sold);
+    actualUnitsTick += sold;
     const unitsQ = sold * TICKS_PER_QUARTER;
     const gross = unitsQ * sku.listPrice;
     const varc = unitsQ * sku.unitCost;
     grossRevenue += gross; cogs += varc; totalUnits += unitsQ;
     const net = gross * (1 - avgMarginCut);
+    // lifetime accumulators use ACTUAL per-tick amounts, not annualized run-rates
+    sku.unitsSoldTotal += sold;
+    sku.contributionTotal += (sold * sku.listPrice * (1 - avgMarginCut)) - (sold * sku.unitCost);
     return { units: unitsQ, revenue: net, gross, margin: net - varc, inventory: sku.inventory };
   });
   w.player.lostSales += lostTick;
@@ -248,13 +304,36 @@ export function step(w: World): World {
   const marketing = w.player.marketing;
   const brandMarketing = w.player.brandMarketing;
   const backOffice = w.player.backOffice;
-  const ebitda = contribution - marketing - brandMarketing - slotting - backOffice;
+  const deptOverhead = (DEPT_TIERS.find((d) => d.tier === w.player.financeDept)?.cost ?? 0)
+                     + (DEPT_TIERS.find((d) => d.tier === w.player.intelDept)?.cost ?? 0);
+  // licensing: annual fee (per quarter) + per-unit royalty on actual units sold
+  let licensingCost = 0;
+  for (const sku of w.player.skus) {
+    if (sku.license) {
+      const lic = LICENSES.find((l) => l.key === sku.license);
+      if (lic) {
+        licensingCost += lic.annualFee / 4; // quarterly share of annual fee
+        const sr = skuResults.find((_, i) => w.player.skus[i] === sku);
+        // per-unit royalty on quarterly units (skuResults[i].units is annualized; divide by 4 for quarterly)
+      }
+    }
+  }
+  // also per-unit royalties (added to COGS conceptually but tracked separately)
+  let unitRoyalties = 0;
+  w.player.skus.forEach((sku, i) => {
+    if (sku.license) {
+      const lic = LICENSES.find((l) => l.key === sku.license);
+      if (lic) unitRoyalties += (skuResults[i]?.units ?? 0) * lic.unitRoyalty;
+    }
+  });
+  licensingCost += unitRoyalties;
+  const ebitda = contribution - marketing - brandMarketing - slotting - backOffice - deptOverhead - licensingCost;
   const interest = w.player.debt * 0.10 / 4; // 10% annual, per quarter
   const profit = ebitda - interest;
 
   const income: IncomeStatement = {
     grossRevenue, channelCut, netRevenue, cogs, contribution,
-    marketing, brandMarketing, slotting, backOffice, ebitda, interest, profit,
+    marketing, brandMarketing, slotting, backOffice, deptOverhead, licensingCost, ebitda, interest, profit,
   };
 
   // ---- working capital / cash flow ----
@@ -273,7 +352,7 @@ export function step(w: World): World {
   const receivablesOutstanding = sum(w.player.receivables.map((r) => r.amount));
 
   // costs paid out immediately this tick (COGS already paid when produced as inventory; here pay opex)
-  const opexTick = (marketing + brandMarketing + slotting + backOffice + interest) / TICKS_PER_QUARTER;
+  const opexTick = (marketing + brandMarketing + slotting + backOffice + deptOverhead + licensingCost + interest) / TICKS_PER_QUARTER;
   // cash moves by collections minus opex (COGS was paid at production time)
   w.player.cash += collected - opexTick;
 
@@ -296,6 +375,22 @@ export function step(w: World): World {
   const totalMarket = sum(w.cube.map((c) => c.head * c.spend));
   const overallShare = totalMarket ? grossRevenue / totalMarket : 0;
 
+  // rolling day/month/year share: actual units sold vs actual market units available per tick.
+  // market units this tick = total category spend for the day / average price (approx via REF basket).
+  const avgPrice = w.player.skus.length ? sum(w.player.skus.map((s) => s.listPrice)) / w.player.skus.length : REF_PRICE;
+  const marketUnitsTick = (totalMarket / TICKS_PER_YEAR) / Math.max(1, avgPrice);
+  w.unitsTickHistory.push(actualUnitsTick);
+  w.marketTickHistory.push(marketUnitsTick);
+  if (w.unitsTickHistory.length > TICKS_PER_YEAR) w.unitsTickHistory.shift();
+  if (w.marketTickHistory.length > TICKS_PER_YEAR) w.marketTickHistory.shift();
+  const windowShare = (n: number) => {
+    const u = w.unitsTickHistory.slice(-n); const m = w.marketTickHistory.slice(-n);
+    const us = u.reduce((a, b) => a + b, 0); const ms = m.reduce((a, b) => a + b, 0);
+    return ms > 0 ? clamp(us / ms, 0, 1) : 0;
+  };
+  const shareMonth = windowShare(TICKS_PER_MONTH);
+  const shareYear = windowShare(TICKS_PER_YEAR);
+
   for (const st of w.studies) {
     if (!st.done) { st.ticksLeft -= 1; if (st.ticksLeft <= 0) { st.done = true; w.revealed[st.type] = { ...computeStudyFact(w, st.type), asOfTick: w.tick }; } }
   }
@@ -309,6 +404,7 @@ export function step(w: World): World {
 
   w.live = {
     income, cashflow, cellFinance, skuResults, totalUnits, overallShare,
+    shareMonth, shareYear,
     totalMarket, totalReach, onlineCoverage, avgMarginCut,
   };
   return w;
@@ -373,6 +469,36 @@ export function computeStudyFact(w: World, type: string): any {
       };
     });
     return { diagnoses };
+  }
+  if (type === "market_report") {
+    const totalMarket = sum(w.cube.map((c) => c.head * c.spend));
+    const baseMarket = sum(w.cube.map((c) => c.baseHead * c.spend));
+    const marketGrowth = baseMarket > 0 ? (totalMarket / baseMarket - 1) : 0;
+    const competitorCount = w.comps.length;
+    const totalProducts = w.comps.reduce((a, c) => a + c.products.length, 0);
+    // concentration: compute share for player + each competitor, sort, find top-3 and how many cover 60%
+    const shares: { name: string; share: number }[] = [];
+    const playerRev = w.live?.income.grossRevenue ?? 0;
+    const playerShare = totalMarket > 0 ? playerRev / totalMarket : 0;
+    shares.push({ name: w.brand.name, share: playerShare });
+    // estimate competitor revenue from their awareness × strength (rough proxy)
+    for (const c of w.comps) {
+      const compRev = c.strength * (totalMarket / (w.comps.length + 1));
+      shares.push({ name: c.name, share: totalMarket > 0 ? compRev / totalMarket : 0 });
+    }
+    shares.sort((a, b) => b.share - a.share);
+    const top3 = shares.slice(0, 3);
+    const top3Share = sum(top3.map((s) => s.share));
+    let cover60 = 0, accum = 0;
+    for (const s of shares) { accum += s.share; cover60++; if (accum >= 0.6) break; }
+    const direction = marketGrowth > 0.02 ? "growing" : marketGrowth < -0.02 ? "declining" : "stable";
+    return {
+      totalMarket, marketGrowth, direction,
+      competitorCount, totalProducts,
+      top3: top3.map((s) => ({ name: s.name, share: s.share })),
+      top3Share, cover60,
+      summary: `The ${w.cfg.label} market is ${direction} (${(marketGrowth * 100).toFixed(1)}% vs base). ${competitorCount} competitors field ${totalProducts} products total. The top 3 players control ${(top3Share * 100).toFixed(0)}% of the market, and it takes ${cover60} player${cover60 > 1 ? "s" : ""} to cover 60%.`,
+    };
   }
   return {};
 }

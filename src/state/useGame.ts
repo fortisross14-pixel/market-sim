@@ -3,6 +3,7 @@ import type { World, Brand, ChannelType, Coord } from "../engine/types";
 import { initWorld, buildSku, STUDY_DEFS, type ProductSpec } from "../engine/world";
 import { step } from "../engine/tick";
 import { launchInheritance } from "../engine/brandEquity";
+import { deriveUnitCost } from "../engine/economics";
 
 export function useGame() {
   const worldRef = useRef<World | null>(null);
@@ -17,12 +18,16 @@ export function useGame() {
   useEffect(() => {
     if (phase !== "play") return;
     let raf = 0, last = performance.now(), acc = 0;
+    // ticks-per-second by speed setting: 1x = 1 day/sec, 2x = 4 days/sec, 3x = 7 days/sec (a week).
+    const tps = (s: number) => (s <= 1 ? 1 : s === 2 ? 4 : 7);
     const loop = (t: number) => {
       const dt = t - last; last = t;
       const paused = !playing || modal !== null;
       if (!paused && worldRef.current) {
-        acc += dt * speed;
-        while (acc >= 140) { step(worldRef.current); acc -= 140; }
+        const msPerTick = 1000 / tps(speed);
+        acc += dt;
+        let guard = 0;
+        while (acc >= msPerTick && guard < 30) { step(worldRef.current); acc -= msPerTick; guard++; }
         rerender();
       }
       raf = requestAnimationFrame(loop);
@@ -44,7 +49,7 @@ export function useGame() {
     w.player.cash -= spec.batch * sku.unitCost;
     // launch inheritance: a new SKU starts with credibility where the brand is already strong
     for (let ci = 0; ci < w.cube.length; ci++) {
-      const inherit = launchInheritance(w, ci);
+      const inherit = launchInheritance(w, ci, sku.productKey);
       if (inherit > 0.01) w.cube[ci].awareness[id] = inherit;
     }
     w.player.skus.push(sku); w.fitCacheDirty = true; setModal(null); rerender();
@@ -62,6 +67,19 @@ export function useGame() {
   }, [rerender]);
   const setProductPrice = useCallback((si: number, price: number) => {
     const w = worldRef.current!; w.player.skus[si].listPrice = price; rerender();
+  }, [rerender]);
+  // change quality for the NEXT batch. perceivedQuality is NOT snapped — it eases over time in the
+  // tick, anchored by the existing customer base, so a popular product's reputation shifts slowly.
+  const setProductQuality = useCallback((si: number, quality: number) => {
+    const w = worldRef.current!; const s = w.player.skus[si];
+    const pt = w.cfg.products.find((p) => p.key === s.productKey)!;
+    s.quality = quality;
+    // recompute unit cost from the new quality (materials+production approximated by quality)
+    s.unitCost = deriveUnitCost(pt, s.method, quality, quality);
+    rerender();
+  }, [rerender]);
+  const setLicense = useCallback((si: number, key: string | null) => {
+    const w = worldRef.current!; w.player.skus[si].license = key; w.fitCacheDirty = true; rerender();
   }, [rerender]);
   const toggleProductChannel = useCallback((si: number, type: ChannelType) => {
     const w = worldRef.current!; const s = w.player.skus[si];
@@ -88,6 +106,8 @@ export function useGame() {
   const setMarketing = useCallback((v: number) => { worldRef.current!.player.marketingTarget = v; rerender(); }, [rerender]);
   const setBrandMarketing = useCallback((v: number) => { worldRef.current!.player.brandMarketingTarget = v; rerender(); }, [rerender]);
   const setBackOffice = useCallback((v: number) => { worldRef.current!.player.backOfficeTarget = v; rerender(); }, [rerender]);
+  const setFinanceDept = useCallback((tier: 0 | 1 | 2 | 3) => { worldRef.current!.player.financeDept = tier; rerender(); }, [rerender]);
+  const setIntelDept = useCallback((tier: 0 | 1 | 2 | 3) => { worldRef.current!.player.intelDept = tier; rerender(); }, [rerender]);
   const setFocus = useCallback((v: string) => { worldRef.current!.player.marketingFocus = v; rerender(); }, [rerender]);
   const saveSegment = useCallback((name: string, filter: Record<string, string[]>) => {
     const w = worldRef.current!;
@@ -98,6 +118,18 @@ export function useGame() {
     const w = worldRef.current!;
     w.savedSegments = w.savedSegments.filter((s) => s.id !== id);
     if (w.player.marketingFocus === "seg:" + id) w.player.marketingFocus = "all";
+    rerender();
+  }, [rerender]);
+  const updateSegment = useCallback((id: string, name: string, filter: Record<string, string[]>) => {
+    const w = worldRef.current!;
+    const seg = w.savedSegments.find((s) => s.id === id);
+    if (seg) { seg.name = name; seg.filter = filter; }
+    rerender();
+  }, [rerender]);
+  const launchCampaign = useCallback((name: string, segmentId: string, budget: number, days: number) => {
+    const w = worldRef.current!;
+    if (w.player.cash < budget) return;
+    w.activeCampaigns.push({ id: "camp_" + Date.now(), name, segmentId, budget, daysRemaining: days, totalDays: days });
     rerender();
   }, [rerender]);
   const selectCell = useCallback((coord: Coord) => { worldRef.current!.selectedCell = coord; rerender(); }, [rerender]);
@@ -117,8 +149,8 @@ export function useGame() {
     world: worldRef.current, phase, setPhase, playing, setPlaying, speed, setSpeed, modal, setModal,
     distSku, openDistribution: (si: number) => { setDistSku(si); setModal("distribution"); },
     launch, createProduct, produce, signContract, removeContract,
-    setPackaging, setProductPrice, toggleProductChannel,
-    setMarketing, setBrandMarketing, setBackOffice, setFocus, selectCell, commission, borrow, repay,
-    saveSegment, deleteSegment,
+    setPackaging, setProductPrice, setProductQuality, setLicense, toggleProductChannel,
+    setMarketing, setBrandMarketing, setBackOffice, setFinanceDept, setIntelDept, setFocus, selectCell, commission, borrow, repay,
+    saveSegment, deleteSegment, updateSegment, launchCampaign,
   };
 }

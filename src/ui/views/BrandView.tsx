@@ -97,6 +97,33 @@ export function BrandView({ world, setMarketing, setBrandMarketing }: {
           </div>
         </Panel>
       </div>
+
+      {/* Per-category equity breakdown */}
+      {hasProducts && (
+        <Panel title="Equity by Product Category — Hot Wheels ≠ Barbie">
+          <div style={{ color: C.faint, fontSize: 11, marginBottom: 10 }}>Brand equity is per-category. Being strong in serums doesn't make you strong in cleansers.</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: C.faint, textAlign: "right" }}>
+                <th style={{ textAlign: "left" }}>Category</th>
+                {METRICS.map((m) => <th key={m.key} style={{ color: m.color }}>{m.label.slice(0, 4)}</th>)}
+              </tr>
+            </thead>
+            <tbody style={{ fontFamily: "ui-monospace" }}>
+              {Array.from(new Set(world.player.skus.map((s) => s.productKey))).map((pk) => {
+                const catEq = brandAverageEquity(world, pk);
+                const ptLabel = world.cfg.products.find((p) => p.key === pk)?.label ?? pk;
+                return (
+                  <tr key={pk} style={{ borderTop: `1px solid ${C.grid}`, textAlign: "right" }}>
+                    <td style={{ textAlign: "left", color: C.ink, padding: "5px 0" }}>{ptLabel}</td>
+                    {METRICS.map((m) => <td key={m.key} style={{ color: C.dim }}>{(catEq[m.key] * 100).toFixed(0)}</td>)}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Panel>
+      )}
     </div>
   );
 }

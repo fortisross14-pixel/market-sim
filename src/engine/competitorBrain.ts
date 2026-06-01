@@ -6,7 +6,7 @@
 // Every meaningful move is pushed as a MarketEvent so the player sees the market react.
 // ============================================================================
 import type { World, Competitor, Cell, AxisKey, CompetitorProduct } from "./types";
-import { TICKS_PER_QUARTER } from "./types";
+import { TICKS_PER_QUARTER, TICK_RATE_SCALE } from "./types";
 import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum } from "./industries";
 import { fit, effectiveTarget, needMatch } from "./cube";
 
@@ -165,12 +165,12 @@ export function competitorAwareness(w: World, comp: Competitor, cell: Cell) {
   const power = clamp((comp.marketing - 40_000) / 400_000, 0, 1.2);
   for (const cp of comp.products) {
     if (comp.exitedCells.includes(coordKey(cell))) {
-      cell.awareness[cp.awarenessKey] = ease(cell.awareness[cp.awarenessKey] ?? 0, 0, 0.02);
+      cell.awareness[cp.awarenessKey] = ease(cell.awareness[cp.awarenessKey] ?? 0, 0, 0.02 * TICK_RATE_SCALE);
       continue;
     }
     const f = fit(cp.target, cell, w.cfg);
     const push = clamp(f * (0.5 + 0.5 * comp.strength));
-    const speed = clamp(0.008 * (0.5 + power * focusMatch));
+    const speed = clamp(0.008 * TICK_RATE_SCALE * (0.5 + power * focusMatch));
     const cur = cell.awareness[cp.awarenessKey] ?? 0;
     cell.awareness[cp.awarenessKey] = clamp(cur + (push - cur) * speed);
   }

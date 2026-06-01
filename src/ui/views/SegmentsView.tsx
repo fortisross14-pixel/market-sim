@@ -1,18 +1,21 @@
 import React, { useState } from "react";
 import { C, bigBtn, ctrlBtn, fmtMoney, fmtNum, fmtPct } from "../theme";
-import { Panel, FieldLabel, TextInput } from "../components";
+import { Panel, FieldLabel, TextInput, Slider } from "../components";
 import { AXES, AXIS_KEYS } from "../../engine/industries";
 import { segmentStats, type SegmentFilter } from "../../engine/segments";
 import type { World, AxisKey } from "../../engine/types";
 
-export function SegmentsView({ world, saveSegment, deleteSegment, setFocus }: {
+export function SegmentsView({ world, saveSegment, deleteSegment, updateSegment, setFocus, launchCampaign }: {
   world: World;
   saveSegment: (name: string, filter: Record<string, string[]>) => void;
   deleteSegment: (id: string) => void;
+  updateSegment: (id: string, name: string, filter: Record<string, string[]>) => void;
   setFocus: (v: string) => void;
+  launchCampaign: (name: string, segmentId: string, budget: number, days: number) => void;
 }) {
   const [name, setName] = useState("");
   const [filter, setFilter] = useState<SegmentFilter>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
   const draftStats = segmentStats(world, filter);
   const mapRevealed = world.revealed.market_map;
 
@@ -22,6 +25,15 @@ export function SegmentsView({ world, saveSegment, deleteSegment, setFocus }: {
       const next = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val];
       return { ...f, [axis]: next };
     });
+  };
+
+  const startEdit = (seg: { id: string; name: string; filter: SegmentFilter }) => {
+    setEditingId(seg.id); setName(seg.name); setFilter({ ...seg.filter });
+  };
+  const saveOrUpdate = () => {
+    if (editingId) { updateSegment(editingId, name, filter); setEditingId(null); }
+    else { saveSegment(name, filter); }
+    setName(""); setFilter({});
   };
 
   return (
@@ -55,9 +67,10 @@ export function SegmentsView({ world, saveSegment, deleteSegment, setFocus }: {
         </div>
         <button style={{ ...bigBtn, width: "100%", marginTop: 12, opacity: name.trim() && draftStats.cellCount > 0 ? 1 : .5 }}
           disabled={!name.trim() || draftStats.cellCount === 0}
-          onClick={() => { saveSegment(name, filter); setName(""); setFilter({}); }}>
-          Save segment
+          onClick={saveOrUpdate}>
+          {editingId ? "Save changes" : "Save segment"}
         </button>
+        {editingId && <button style={{ ...ctrlBtn, width: "100%", marginTop: 6 }} onClick={() => { setEditingId(null); setName(""); setFilter({}); }}>Cancel edit</button>}
       </Panel>
 
       <Panel title="Saved Segments" style={{ flex: "1 1 380px" }}>
@@ -77,11 +90,17 @@ export function SegmentsView({ world, saveSegment, deleteSegment, setFocus }: {
                 {mapRevealed && topNeed && <> · wants <span style={{ color: C.violet }}>{world.cfg.needs.find((n) => n.key === topNeed[0])?.label}</span></>}
                 {mapRevealed && st.playerShareValue > 0 && <> · you capture <span style={{ color: C.green }}>{fmtMoney(st.playerShareValue)}</span></>}
               </div>
+              <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 6 }}>
+                {Object.entries(seg.filter).filter(([, v]) => v && v.length > 0).map(([axis, vals]) => (
+                  <span key={axis} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4, padding: "2px 6px", fontSize: 10, color: C.dim }}>{vals.join(", ")}</span>
+                ))}
+              </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => setFocus(targeted ? "all" : "seg:" + seg.id)}
                   style={{ ...ctrlBtn, background: targeted ? C.cyan : C.panel, color: targeted ? "#06121c" : C.dim, flex: 1 }}>
                   {targeted ? "✓ Marketing focus" : "Target marketing here"}
                 </button>
+                <button style={ctrlBtn} onClick={() => startEdit(seg)}>Edit</button>
                 <button style={ctrlBtn} onClick={() => deleteSegment(seg.id)}>✕</button>
               </div>
             </div>
@@ -91,7 +110,60 @@ export function SegmentsView({ world, saveSegment, deleteSegment, setFocus }: {
           Targeting a narrow segment concentrates marketing for stronger awareness per person; targeting a broad one spreads it thinner. Pick the trade-off.
         </div>
       </Panel>
+
+      <CampaignPanel world={world} launchCampaign={launchCampaign} />
     </div>
+  );
+}
+
+function CampaignPanel({ world, launchCampaign }: { world: World; launchCampaign: (name: string, segmentId: string, budget: number, days: number) => void }) {
+  const [campSeg, setCampSeg] = useState("");
+  const [campBudget, setCampBudget] = useState(100000);
+  const [campDays, setCampDays] = useState(30);
+  const segs = world.savedSegments;
+  const affordable = campBudget <= world.player.cash;
+  return (
+    <Panel title="Campaigns — one-off marketing pushes" style={{ flex: "1 0 100%" }}>
+      {world.activeCampaigns.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: C.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }}>Active</div>
+          {world.activeCampaigns.map((c) => (
+            <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
+              <span style={{ color: C.ink }}>{c.name}</span>
+              <span style={{ color: C.cyan, fontFamily: "ui-monospace" }}>{c.daysRemaining}d left · {fmtMoney(c.budget)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {segs.length === 0 ? (
+        <div style={{ color: C.faint, fontSize: 13 }}>Create a saved segment first to target a campaign.</div>
+      ) : (
+        <div>
+          <FieldLabel>Target segment</FieldLabel>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+            {segs.map((s) => (
+              <button key={s.id} onClick={() => setCampSeg(s.id)}
+                style={{ background: campSeg === s.id ? C.cyan : C.panel2, color: campSeg === s.id ? "#06121c" : C.dim, border: `1px solid ${campSeg === s.id ? C.cyan : C.line}`, borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <Slider label="Budget" min={20000} max={500000} step={10000} value={campBudget} fmt={fmtMoney} onChange={setCampBudget} />
+          <Slider label="Duration (days)" min={7} max={90} step={1} value={campDays} fmt={(v) => `${v}d`} onChange={setCampDays} />
+          <div style={{ color: affordable ? C.dim : C.red, fontSize: 11, marginBottom: 8 }}>
+            Daily spend: {fmtMoney(campBudget / campDays)} · Cash: {fmtMoney(world.player.cash)}
+          </div>
+          <button style={{ ...bigBtn, width: "100%", opacity: campSeg && affordable ? 1 : 0.5 }}
+            disabled={!campSeg || !affordable}
+            onClick={() => { launchCampaign(`Campaign → ${segs.find((s) => s.id === campSeg)?.name ?? "?"}`, campSeg, campBudget, campDays); }}>
+            Launch campaign
+          </button>
+        </div>
+      )}
+      <div style={{ color: C.faint, fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+        A campaign is a fixed-budget, time-limited push that boosts awareness in the targeted segment. Different from your running marketing expense — campaigns end, running expense persists.
+      </div>
+    </Panel>
   );
 }
 

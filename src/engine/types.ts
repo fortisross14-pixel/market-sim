@@ -1,10 +1,17 @@
 // ============================================================================
 // Domain types. Money is in whole currency units (dollars). Units are item counts.
-// "PerQuarter" quantities are run-rates; the tick loop slices them by TICKS_PER_QUARTER.
+// One TICK = one day. Months are 30 days, quarters 90, years 360 (clean calendar).
+// "PerQuarter" quantities are run-rates; the loop slices them by TICKS_PER_QUARTER.
 // ============================================================================
 
-export const TICKS_PER_QUARTER = 24;
-export const TICKS_PER_YEAR = TICKS_PER_QUARTER * 4;
+export const TICKS_PER_DAY = 1;
+export const DAYS_PER_MONTH = 30;
+export const TICKS_PER_MONTH = 30;
+export const TICKS_PER_QUARTER = 90;
+export const TICKS_PER_YEAR = 360;
+// Per-tick easing rates were tuned at 24 ticks/quarter. With 90 now, scale them so the
+// per-quarter behaviour (how fast awareness/equity/customers move) stays balanced.
+export const TICK_RATE_SCALE = 24 / TICKS_PER_QUARTER;
 
 export type AxisKey = "gender" | "age" | "class" | "leaning" | "geography" | "family";
 
@@ -126,7 +133,8 @@ export interface SKU {
   productKey: string;
   method: ProductMethod;
   target: Record<AxisKey, number>;
-  quality: number;
+  quality: number;          // actual quality you build (drives unit cost)
+  perceivedQuality: number; // what the market believes — lags actual, anchored by existing customers
   unitCost: number;
   listPrice: number;
   priceSens: number;
@@ -135,6 +143,9 @@ export interface SKU {
   attributes: Record<string, number>; // need vector (0..1 per need key)
   packaging: string; // packaging preset key
   channels: ChannelType[]; // which company channels carry THIS product
+  license: string | null; // license key or null (no license)
+  unitsSoldTotal: number;   // cumulative lifetime units
+  contributionTotal: number; // cumulative lifetime contribution ($)
 }
 
 export type ChannelType = "retail" | "marketplace" | "ownweb" | "flagship";
@@ -174,6 +185,8 @@ export interface IncomeStatement {
   brandMarketing: number;
   slotting: number;
   backOffice: number;
+  deptOverhead: number;
+  licensingCost: number;
   ebitda: number;
   interest: number;
   profit: number;
@@ -219,6 +232,8 @@ export interface Brand {
   positioning: string;
 }
 
+export type DeptTier = 0 | 1 | 2 | 3; // 0=none, 1=small, 2=medium, 3=large
+
 export interface PlayerState {
   skus: SKU[];
   contracts: Contract[];
@@ -233,7 +248,17 @@ export interface PlayerState {
   debt: number;
   lostSales: number;
   receivables: Receivable[];
+  // departments: higher tier = more visibility, but more overhead cost per quarter
+  financeDept: DeptTier;    // gates Financials tab detail
+  intelDept: DeptTier;      // gates Market, Strategy, Intelligence tab detail
 }
+
+export const DEPT_TIERS: { tier: DeptTier; label: string; cost: number; detail: string }[] = [
+  { tier: 0, label: "None", cost: 0, detail: "Cash balance + quarterly totals only." },
+  { tier: 1, label: "Small team", cost: 30_000, detail: "Monthly high-level summaries (revenue, costs, share)." },
+  { tier: 2, label: "Department", cost: 80_000, detail: "Detailed by-SKU and by-segment breakdowns, weekly." },
+  { tier: 3, label: "Full department", cost: 150_000, detail: "Everything, all charts, near-real-time (daily)." },
+];
 
 export interface LiveSnapshot {
   income: IncomeStatement;
@@ -241,7 +266,9 @@ export interface LiveSnapshot {
   cellFinance: CellFinance[];
   skuResults: SkuResult[];
   totalUnits: number;
-  overallShare: number;
+  overallShare: number;       // instantaneous (this-tick run-rate) share
+  shareMonth: number;         // share over the trailing 30 days (actual units / actual market)
+  shareYear: number;          // share over the trailing 360 days
   totalMarket: number;
   totalReach: number;
   onlineCoverage: number;
@@ -256,6 +283,15 @@ export interface HistoryPoint {
   share: number;
   cash: number;
   operatingCashFlow: number;
+}
+
+export interface Campaign {
+  id: string;
+  name: string;
+  segmentId: string;     // saved segment id to target
+  budget: number;        // total spend
+  daysRemaining: number; // ticks left
+  totalDays: number;     // original duration
 }
 
 export interface World {
@@ -281,10 +317,15 @@ export interface World {
   fitCache: Record<string, number[]>;
   fitCacheDirty: boolean;
   savedSegments: import("./segments").SavedSegment[];
-  // brand equity per cell index: { trust, prestige, value, innovation } each 0..1.
-  // distinct from awareness — "what they believe" vs "do they know us". Sparse: only cells we've touched.
-  brandEquity: Record<number, { trust: number; prestige: number; value: number; innovation: number }>;
+  // brand equity per CATEGORY per cell: brandEquity[productKey][cellIndex] = Equity.
+  // Hot Wheels is big in toy cars, not in dolls. A new product inherits its own category's equity.
+  brandEquity: Record<string, Record<number, { trust: number; prestige: number; value: number; innovation: number }>>;
   // customer base per cell index: how many people in that segment are "ours", and how satisfied.
   // Sparse — only cells we've acquired customers in. customers ≤ cell.head.
   customers: Record<number, { count: number; satisfaction: number }>;
+  // rolling per-tick actual units sold and market consumed, for day/month/year share windows.
+  // active one-off marketing campaigns (time-limited, segment-targeted awareness boosts)
+  activeCampaigns: Campaign[];
+  unitsTickHistory: number[];
+  marketTickHistory: number[];
 }

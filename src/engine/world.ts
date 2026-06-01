@@ -9,6 +9,7 @@ export const STUDY_DEFS: Record<string, { label: string; cost: number; ticks: nu
   gap_analysis: { label: "Gap Analysis", cost: 90000, ticks: 18, blurb: "Finds cells with high market but weak brand fit — niches." },
   competitor_benchmark: { label: "Competitor Benchmark", cost: 120000, ticks: 24, blurb: "Rivals' price, personality & margin vs. yours." },
   product_diagnosis: { label: "Product Diagnosis", cost: 80000, ticks: 16, blurb: "For each product: its best-fit segment and whether channel or packaging is holding it back." },
+  market_report: { label: "Market Report", cost: 150000, ticks: 30, blurb: "Category growth, competitor count, market concentration (top-3 share, who controls 60%), and directional trends." },
 };
 
 export function initWorld(industryId: string, company: string, brand: Brand, startCash: number): World {
@@ -34,6 +35,7 @@ export function initWorld(industryId: string, company: string, brand: Brand, sta
       skus: [], contracts: [], marketing: 60000, marketingTarget: 60000, marketingFocus: "all",
       brandMarketing: 0, brandMarketingTarget: 0,
       backOffice: 70000, backOfficeTarget: 70000, cash: startCash, debt: 0, lostSales: 0, receivables: [],
+      financeDept: 0, intelDept: 0,
     },
     studies: [], revealed: {}, history: [], events: [],
     pendingShockTick: 80 + Math.floor(Math.random() * 80), shock: null,
@@ -42,6 +44,8 @@ export function initWorld(industryId: string, company: string, brand: Brand, sta
     savedSegments: presetSegments(),
     brandEquity: {},
     customers: {},
+    activeCampaigns: [],
+    unitsTickHistory: [], marketTickHistory: [],
   };
 }
 
@@ -61,7 +65,9 @@ export function buildSku(cfg: World["cfg"], spec: ProductSpec, id: string): SKU 
   return {
     id, name: spec.name, productKey: spec.productKey, method: spec.method,
     target: { gender: spec.gGender, age: spec.gAge, class: spec.gClass, leaning: spec.gLeaning, geography: spec.gGeography ?? 0.5, family: spec.gFamily ?? 0.5 },
-    quality, unitCost, listPrice: spec.listPrice, priceSens: 1.0, inventory: spec.batch, online: spec.online,
+    quality, perceivedQuality: quality, unitCost, listPrice: spec.listPrice, priceSens: 1.0, inventory: spec.batch, online: spec.online,
+    unitsSoldTotal: 0, contributionTotal: 0,
+    license: null,
     attributes: { ...spec.attributes },
     packaging: spec.packaging ?? "minimal",
     channels: spec.channels ? [...spec.channels] : [],

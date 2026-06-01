@@ -137,3 +137,40 @@ export function packagingNeedBias(industryId: string, key: string): Record<strin
   }
   return {};
 }
+
+// ============================================================================
+// Licensing — named IP-style licenses the player can attach to a product.
+// Each license has a cost (annual royalty), a per-unit royalty, and a "pull"
+// that boosts the licensed/collectible attributes + initial awareness.
+// Category multiplier determines how much the license matters (huge for toys, modest for food).
+// ============================================================================
+export interface License {
+  key: string;
+  label: string;
+  tier: "minor" | "major" | "mega";
+  annualFee: number;    // flat $/yr royalty
+  unitRoyalty: number;  // $/unit surcharge
+  pull: number;         // 0..1 how much this license boosts licensed/collectible attributes
+  categoryMult: Record<string, number>; // industry id -> how much this license matters there (default 1)
+}
+
+export const LICENSES: License[] = [
+  // minor licenses ($20-60k/yr, low pull)
+  { key: "indie_comics",   label: "Indie Comics Universe",     tier: "minor", annualFee: 25_000,  unitRoyalty: 0.30, pull: 0.25, categoryMult: { toys: 1.2, skincare: 0.3 } },
+  { key: "retro_arcade",   label: "Retro Arcade Classics",     tier: "minor", annualFee: 30_000,  unitRoyalty: 0.25, pull: 0.30, categoryMult: { toys: 1.3, skincare: 0.2 } },
+  { key: "nature_doc",     label: "Planet Wild (Nature Doc)",   tier: "minor", annualFee: 20_000,  unitRoyalty: 0.20, pull: 0.20, categoryMult: { toys: 0.8, skincare: 0.9 } },
+  { key: "local_sport",    label: "National League (Local)",    tier: "minor", annualFee: 40_000,  unitRoyalty: 0.35, pull: 0.35, categoryMult: { toys: 1.0, skincare: 0.4 } },
+  { key: "cooking_show",   label: "Master Kitchen (TV Show)",   tier: "minor", annualFee: 35_000,  unitRoyalty: 0.30, pull: 0.25, categoryMult: { toys: 0.5, skincare: 0.7 } },
+  // major licenses ($80-200k/yr, medium pull)
+  { key: "fantasy_saga",   label: "Realm of Crowns (Fantasy)",  tier: "major", annualFee: 120_000, unitRoyalty: 0.80, pull: 0.55, categoryMult: { toys: 1.4, skincare: 0.3 } },
+  { key: "space_opera",    label: "Stellar Frontiers (Sci-Fi)", tier: "major", annualFee: 150_000, unitRoyalty: 0.90, pull: 0.60, categoryMult: { toys: 1.5, skincare: 0.2 } },
+  { key: "animated_kids",  label: "Sunny Pals (Kids Animated)", tier: "major", annualFee: 100_000, unitRoyalty: 0.70, pull: 0.55, categoryMult: { toys: 1.6, skincare: 0.4 } },
+  { key: "global_soccer",  label: "World Football League",      tier: "major", annualFee: 180_000, unitRoyalty: 1.00, pull: 0.60, categoryMult: { toys: 1.2, skincare: 0.5 } },
+  { key: "global_basket",  label: "Pro Basketball Association",  tier: "major", annualFee: 160_000, unitRoyalty: 0.95, pull: 0.55, categoryMult: { toys: 1.1, skincare: 0.4 } },
+  // mega licenses ($300k+/yr, high pull)
+  { key: "superhero",      label: "Titan Heroes Universe",      tier: "mega",  annualFee: 350_000, unitRoyalty: 1.50, pull: 0.80, categoryMult: { toys: 1.8, skincare: 0.3 } },
+  { key: "princess_magic", label: "Enchanted Kingdoms",          tier: "mega",  annualFee: 300_000, unitRoyalty: 1.40, pull: 0.75, categoryMult: { toys: 1.7, skincare: 0.5 } },
+  { key: "racing_cars",    label: "Speedway Legends",            tier: "mega",  annualFee: 280_000, unitRoyalty: 1.20, pull: 0.70, categoryMult: { toys: 1.5, skincare: 0.2 } },
+  { key: "monster_world",  label: "Creature Realms (Monsters)",  tier: "mega",  annualFee: 320_000, unitRoyalty: 1.30, pull: 0.75, categoryMult: { toys: 1.6, skincare: 0.2 } },
+  { key: "pop_music",      label: "Global Pop Icons",            tier: "mega",  annualFee: 400_000, unitRoyalty: 1.60, pull: 0.85, categoryMult: { toys: 1.3, skincare: 0.7 } },
+];

@@ -5,6 +5,15 @@ import { computeSwot, computePorter, computeBcg, computeBoardMemo, computeProduc
 import type { World } from "../../engine/types";
 
 export function StrategyView({ world }: { world: World }) {
+  if (world.player.intelDept < 2) {
+    return (
+      <Panel title="Strategy Reports">
+        <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
+          Your Market Intelligence team isn't large enough for strategic analysis. Upgrade to at least "Department" level in Operations → Departments.
+        </div>
+      </Panel>
+    );
+  }
   const swot = computeSwot(world);
   const forces = computePorter(world);
   const bcg = computeBcg(world);

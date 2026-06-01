@@ -4,13 +4,14 @@ import { Panel, Slider, FieldLabel } from "../components";
 import { AXES, CHANNEL_TYPES, PACKAGING } from "../../engine/industries";
 import { contractReach } from "../../engine/economics";
 import { STUDY_DEFS } from "../../engine/world";
-import { TICKS_PER_QUARTER } from "../../engine/types";
+import { TICKS_PER_QUARTER, DEPT_TIERS, type DeptTier } from "../../engine/types";
 import type { World } from "../../engine/types";
 
-export function OperationsView({ world, produce, openCreator, openContract, removeContract, setMarketing, setBackOffice, setFocus, openDistribution }: {
+export function OperationsView({ world, produce, openCreator, openContract, removeContract, setMarketing, setBackOffice, setFocus, openDistribution, setFinanceDept, setIntelDept }: {
   world: World; produce: (si: number, qty: number) => void; openCreator: () => void; openContract: () => void;
   removeContract: (i: number) => void; setMarketing: (v: number) => void; setBackOffice: (v: number) => void; setFocus: (v: string) => void;
   openDistribution: (si: number) => void;
+  setFinanceDept: (t: DeptTier) => void; setIntelDept: (t: DeptTier) => void;
 }) {
   return (
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -70,11 +71,34 @@ export function OperationsView({ world, produce, openCreator, openContract, remo
         <Slider label="Marketing / promotion (per Q)" min={20000} max={400000} step={5000} value={world.player.marketingTarget} fmt={fmtMoney} onChange={setMarketing} />
         <Slider label="Back-office overhead" min={40000} max={300000} step={5000} value={world.player.backOfficeTarget} fmt={fmtMoney} onChange={setBackOffice} />
       </Panel>
+
+      <Panel title="Departments — what you know costs money" style={{ flex: "1 1 340px" }}>
+        <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+          Bigger departments mean more visibility into your financials and market — but they cost every quarter.
+        </div>
+        <DeptSelector label="Finance" tier={world.player.financeDept} onChange={setFinanceDept} />
+        <div style={{ height: 10 }} />
+        <DeptSelector label="Market Intelligence" tier={world.player.intelDept} onChange={setIntelDept} />
+        {(world.player.financeDept > 0 || world.player.intelDept > 0) && (
+          <div style={{ color: C.amber, fontSize: 12, marginTop: 10 }}>
+            Dept overhead: {fmtMoney((DEPT_TIERS.find((d) => d.tier === world.player.financeDept)?.cost ?? 0) + (DEPT_TIERS.find((d) => d.tier === world.player.intelDept)?.cost ?? 0))}/Q
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
 
 export function IntelligenceView({ world, commission }: { world: World; commission: (t: string) => void }) {
+  if (world.player.intelDept < 1) {
+    return (
+      <Panel title="Intelligence">
+        <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
+          You need at least a small Market Intelligence team to commission studies. Hire one in Operations → Departments.
+        </div>
+      </Panel>
+    );
+  }
   return (
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
       <Panel title="Commission a Study" style={{ flex: "1 1 320px" }}>
@@ -131,6 +155,27 @@ export function IntelligenceView({ world, commission }: { world: World; commissi
             <div style={{ color: C.faint, fontSize: 11, marginTop: 8 }}>Re-run after changing packaging or channels to see if the gap closed.</div>
           </Report>
         )}
+        {world.revealed.market_report && (
+          <Report title="Market Report">
+            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, marginBottom: 8 }}>
+              {world.revealed.market_report.summary}
+            </div>
+            <div style={{ fontSize: 12 }}>
+              <div style={{ color: C.dim, marginBottom: 4 }}>Top 3 players:</div>
+              {world.revealed.market_report.top3.map((p: any, i: number) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                  <span style={{ color: C.ink }}>{i + 1}. {p.name}</span>
+                  <span style={{ fontFamily: "ui-monospace", color: C.violet }}>{fmtPct(p.share)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ color: C.faint, fontSize: 11, marginTop: 8 }}>
+              Direction: <span style={{ color: world.revealed.market_report.direction === "growing" ? C.green : world.revealed.market_report.direction === "declining" ? C.red : C.dim }}>
+                {world.revealed.market_report.direction}
+              </span> ({fmtPct(world.revealed.market_report.marketGrowth)} vs base). {world.revealed.market_report.cover60} player(s) cover 60% of the market.
+            </div>
+          </Report>
+        )}
       </Panel>
     </div>
   );
@@ -140,3 +185,21 @@ const Report = ({ title, children }: { title: string; children: React.ReactNode 
     <div style={{ color: C.cyan, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 8 }}>{title}</div>{children}
   </div>
 );
+
+function DeptSelector({ label, tier, onChange }: { label: string; tier: DeptTier; onChange: (t: DeptTier) => void }) {
+  return (
+    <div>
+      <div style={{ color: C.ink, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {DEPT_TIERS.map((d) => (
+          <button key={d.tier} onClick={() => onChange(d.tier)}
+            style={{ background: tier === d.tier ? C.cyan : C.panel2, color: tier === d.tier ? "#06121c" : C.dim, border: `1px solid ${tier === d.tier ? C.cyan : C.line}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer", flex: "1 1 0" }}>
+            <div style={{ fontWeight: 600 }}>{d.label}</div>
+            {d.cost > 0 && <div style={{ fontSize: 10, opacity: 0.8 }}>{fmtMoney(d.cost)}/Q</div>}
+          </button>
+        ))}
+      </div>
+      <div style={{ color: C.faint, fontSize: 11, marginTop: 3 }}>{DEPT_TIERS.find((d) => d.tier === tier)?.detail}</div>
+    </div>
+  );
+}

@@ -6,12 +6,32 @@ import type { World, Coord } from "../../engine/types";
 
 export function MarketView({ world, hist, selectCell }:
   { world: World; hist: World["history"]; selectCell: (c: Coord) => void }) {
+  const tier = world.player.intelDept;
+  if (tier === 0) {
+    return (
+      <Panel>
+        <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
+          You have no Market Intelligence department. You can't see the market yet.
+        </div>
+        <div style={{ color: C.faint, fontSize: 12, marginTop: 10 }}>
+          Go to Operations → Departments to hire a Market Intelligence team and unlock market visibility.
+        </div>
+      </Panel>
+    );
+  }
   const markers = world.events.map((e) => ({ i: hist.findIndex((h) => h.tick >= e.tick) })).filter((m) => m.i >= 0);
   return (
     <>
       <Panel title="Your Market Share" style={{ marginBottom: 16 }}>
+        {world.live && (
+          <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+            <SharePill label="Today" value={world.live.overallShare} color={world.brand.color} />
+            <SharePill label="This month" value={world.live.shareMonth} color={world.brand.color} />
+            <SharePill label="This year" value={world.live.shareYear} color={world.brand.color} />
+          </div>
+        )}
         <LineChart series={[{ data: hist.map((h) => h.share), color: world.brand.color }]} fmt={fmtPct} markers={markers} />
-        <div style={{ color: C.dim, fontSize: 12, marginTop: 6 }}>Launches start near 0% and climb as awareness builds. Amber lines mark market shocks.</div>
+        <div style={{ color: C.dim, fontSize: 12, marginTop: 6 }}>Daily share spikes when you sell and drops to zero when you're out of stock. Month/year smooth that out — a product that sells out mid-period can still post a strong annual share.</div>
       </Panel>
       <CubeInspector world={world} selectCell={selectCell} />
     </>
@@ -110,4 +130,13 @@ function topNeeds(world: World, coord: Coord) {
   if (!cell) return [];
   return world.cfg.needs.map((n) => ({ label: n.label, value: cell.needPref[n.key] ?? 0 }))
     .sort((a, b) => b.value - a.value).slice(0, 4);
+}
+
+function SharePill({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{ flex: "1 1 90px", background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 12px" }}>
+      <div style={{ color: C.dim, fontSize: 11 }}>{label}</div>
+      <div style={{ color, fontSize: 20, fontWeight: 700, fontFamily: "ui-monospace" }}>{fmtPct(value)}</div>
+    </div>
+  );
 }
