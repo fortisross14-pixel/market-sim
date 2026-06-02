@@ -1,5 +1,6 @@
 import type { World, Brand, SKU, Competitor, AxisKey } from "./types";
-import { INDUSTRIES, AXES, axisPos } from "./industries";
+import { computeProductRarity, DESIGN_DEPTHS } from "./types";
+import { INDUSTRIES, AXES, axisPos, clamp } from "./industries";
 import { buildCube } from "./cube";
 import { deriveUnitCost, deriveQuality } from "./economics";
 import { presetSegments } from "./segments";
@@ -36,6 +37,13 @@ export function initWorld(industryId: string, company: string, brand: Brand, sta
       brandMarketing: 0, brandMarketingTarget: 0,
       backOffice: 70000, backOfficeTarget: 70000, cash: startCash, debt: 0, lostSales: 0, receivables: [],
       financeDept: 0, intelDept: 0,
+      locations: [
+        { id: "off0", type: "office", tier: 0, monthlyCost: 8_000 },
+        { id: "wh0", type: "warehouse", tier: 0, monthlyCost: 5_000 },
+      ],
+      personnel: [],
+      expertise: { industry: {}, category: {} },
+      vision: null,
     },
     studies: [], revealed: {}, history: [], events: [],
     pendingShockTick: 80 + Math.floor(Math.random() * 80), shock: null,
@@ -45,32 +53,53 @@ export function initWorld(industryId: string, company: string, brand: Brand, sta
     brandEquity: {},
     customers: {},
     activeCampaigns: [],
+    agencyRelationships: {},
     unitsTickHistory: [], marketTickHistory: [],
   };
 }
 
 export interface ProductSpec {
   name: string; productKey: string; method: "outsource" | "own";
-  materialsQ: number; productionQ: number; online: number; listPrice: number; batch: number;
+  materialsQ: number; productionQ: number; online: number; listPrice: number;
   gAge: number; gClass: number; gGender: number; gLeaning: number;
   gGeography?: number; gFamily?: number;
-  attributes: Record<string, number>; // need vector chosen in the creator
+  attributes: Record<string, number>;
   packaging?: string; channels?: import("./types").ChannelType[];
+  pmSkill?: number;
+  pmId?: string;
+  designDepth?: import("./types").DesignDepth;
 }
 
-export function buildSku(cfg: World["cfg"], spec: ProductSpec, id: string): SKU {
+export function buildSku(cfg: World["cfg"], spec: ProductSpec, id: string, tick = 0, expertise = 0): SKU {
   const pt = cfg.products.find((p) => p.key === spec.productKey)!;
   const unitCost = deriveUnitCost(pt, spec.method, spec.materialsQ, spec.productionQ);
   const quality = deriveQuality(spec.materialsQ, spec.productionQ);
+  const depth = spec.designDepth ?? "normal";
+  const depthDef = DESIGN_DEPTHS[depth];
+  const attrSpread = Object.values(spec.attributes).length > 0
+    ? Math.max(...Object.values(spec.attributes)) - Math.min(...Object.values(spec.attributes))
+    : 0;
+  const designQuality = clamp((0.2 + attrSpread * 0.3 + (spec.pmSkill ?? 0.2) * 0.3 + expertise * 0.04) * depthDef.qualityMult, 0, 1);
+  const rarityScore = quality * 0.3 + designQuality * 0.4 + expertise * 0.06;
   return {
     id, name: spec.name, productKey: spec.productKey, method: spec.method,
     target: { gender: spec.gGender, age: spec.gAge, class: spec.gClass, leaning: spec.gLeaning, geography: spec.gGeography ?? 0.5, family: spec.gFamily ?? 0.5 },
-    quality, perceivedQuality: quality, unitCost, listPrice: spec.listPrice, priceSens: 1.0, inventory: spec.batch, online: spec.online,
+    // lifecycle: starts in "designing" state, no inventory, PM locked
+    status: "designing",
+    assignedPmId: spec.pmId ?? null,
+    designDepth: depth,
+    designDaysLeft: depthDef.days,
+    mfgDaysLeft: 0,
+    mfgBatchSize: 0,
+    // quality
+    quality, designQuality, perceivedQuality: quality,
+    novelty: 1.0, fame: 0, rarity: computeProductRarity(rarityScore),
+    lifetimeDays: pt.lifetimeDays, launchTick: 0, // set when first manufactured
+    // economics: zero inventory until manufactured
+    unitCost, listPrice: spec.listPrice, priceSens: 1.0, inventory: 0, online: spec.online,
     unitsSoldTotal: 0, contributionTotal: 0,
-    license: null,
-    attributes: { ...spec.attributes },
-    packaging: spec.packaging ?? "minimal",
-    channels: spec.channels ? [...spec.channels] : [],
+    attributes: spec.attributes, packaging: spec.packaging ?? "standard",
+    channels: spec.channels ?? [], assignedPartnerIds: [], license: null,
   };
 }
 

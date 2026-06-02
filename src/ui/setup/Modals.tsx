@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { C, bigBtn, ctrlBtn, fmtMoney } from "../theme";
 import { FieldLabel, TextInput, ChoiceCard, Slider, Seg, Econ } from "../components";
-import { AXES, METHODS, CHANNEL_TYPES, PACKAGING, packagingNeedBias, LICENSES } from "../../engine/industries";
+import { AXES, METHODS, CHANNEL_TYPES, PACKAGING, packagingNeedBias, LICENSES, RETAIL_PARTNERS } from "../../engine/industries";
 import { deriveUnitCost, deriveQuality, contractReach } from "../../engine/economics";
 import { normAxis, type ProductSpec } from "../../engine/world";
 import { segmentStats } from "../../engine/segments";
-import type { World, ChannelType } from "../../engine/types";
+import type { World, ChannelType, DesignDepth } from "../../engine/types";
+import { DESIGN_DEPTHS } from "../../engine/types";
 
 export function ProductCreator({ world, onCreate, onClose }: { world: World; onCreate: (s: ProductSpec) => void; onClose: () => void }) {
   const cfg = world.cfg;
@@ -18,7 +19,7 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
   const [intendedSeg, setIntendedSeg] = useState("");
   const pt = cfg.products.find((p) => p.key === productKey)!;
   const [listPrice, setListPrice] = useState(Math.round((pt.priceBand[0] + pt.priceBand[1]) / 2));
-  const [batch, setBatch] = useState(60000);
+  const [designDepth, setDesignDepth] = useState<import("../../engine/types").DesignDepth>("normal");
   const [attributes, setAttributes] = useState<Record<string, number>>(
     () => Object.fromEntries(cfg.needs.map((n) => [n.key, pt.defaultAttributes?.[n.key] ?? 0.4]))
   );
@@ -30,9 +31,9 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
 
   const unitCost = deriveUnitCost(pt, method, materialsQ, productionQ);
   const quality = deriveQuality(materialsQ, productionQ);
-  const batchCost = batch * unitCost;
+  const depthDef = DESIGN_DEPTHS[designDepth];
   const marginPct = (listPrice - unitCost) / listPrice;
-  const canAfford = batchCost <= world.player.cash;
+  const canStart = name.trim().length > 0;
 
   return (
     <Modal onClose={onClose} title={<>New Product — <span style={{ color: world.brand.color }}>{world.brand.name}</span></>} wide>
@@ -105,20 +106,30 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
             <Econ k="Margin / unit (pre-retail)" v={`${cfg.currency}${(listPrice - unitCost).toFixed(2)} (${(marginPct * 100).toFixed(0)}%)`} color={marginPct > 0 ? C.green : C.red} />
           </div>
           <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14 }}>
-            <FieldLabel>Initial production batch</FieldLabel>
-            <Slider label="Units to manufacture" min={0} max={300000} step={5000} value={batch} fmt={(v) => v.toLocaleString()} onChange={setBatch} />
-            <Econ k="Batch cost (cash now)" v={fmtMoney(batchCost)} color={canAfford ? C.ink : C.red} />
-            <Econ k="Cash after" v={fmtMoney(world.player.cash - batchCost)} color={canAfford ? C.dim : C.red} />
-            {!canAfford && <div style={{ color: C.red, fontSize: 11, marginTop: 6 }}>Not enough cash for this batch.</div>}
+            <FieldLabel>Design depth</FieldLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+              {(Object.keys(DESIGN_DEPTHS) as DesignDepth[]).map((d) => {
+                const dd = DESIGN_DEPTHS[d];
+                return (
+                  <ChoiceCard key={d} active={designDepth === d} onClick={() => setDesignDepth(d)}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{dd.label}</div>
+                    <div style={{ color: C.dim, fontSize: 10, lineHeight: 1.3, marginTop: 3 }}>{dd.days} days · ×{dd.qualityMult} design quality</div>
+                  </ChoiceCard>
+                );
+              })}
+            </div>
+            <Econ k="Design time" v={`${depthDef.days} days`} color={C.cyan} />
+            <Econ k="Design quality multiplier" v={`×${depthDef.qualityMult}`} color={depthDef.qualityMult > 1 ? C.green : depthDef.qualityMult < 1 ? C.amber : C.dim} />
+            <div style={{ color: C.faint, fontSize: 11, marginTop: 6 }}>The PM will be locked during design. Manufacturing is a separate step after the design is complete.</div>
             <div style={{ marginTop: 10, color: C.faint, fontSize: 11, lineHeight: 1.5 }}>Producing spends cash now; you recover it as the stock sells — through channel payment terms.</div>
           </div>
         </div>
       </div>
       <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <button style={ctrlBtn} onClick={onClose}>Cancel</button>
-        <button style={{ ...bigBtn, background: world.brand.color, opacity: (name.trim() && canAfford) ? 1 : .5 }} disabled={!name.trim() || !canAfford}
-          onClick={() => onCreate({ name, productKey, method, materialsQ, productionQ, online, listPrice, batch, gAge: 0.5, gClass: 0.5, gGender: 0.5, gLeaning: 0.5, gGeography: 0.5, gFamily: 0.5, attributes })}>
-          Manufacture & launch
+        <button style={{ ...bigBtn, background: world.brand.color, opacity: canStart ? 1 : .5 }} disabled={!canStart}
+          onClick={() => onCreate({ name, productKey, method, materialsQ, productionQ, online, listPrice, gAge: 0.5, gClass: 0.5, gGender: 0.5, gLeaning: 0.5, gGeography: 0.5, gFamily: 0.5, attributes, designDepth })}>
+          Start Design ({depthDef.days} days) & launch
         </button>
       </div>
     </Modal>
@@ -224,36 +235,42 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
   );
 }
 
-export function ContractModal({ world, onSign, onClose }: { world: World; onSign: (t: ChannelType, cut: number) => void; onClose: () => void }) {
-  const [type, setType] = useState<ChannelType>("retail");
-  const t = CHANNEL_TYPES[type];
-  const [marginCut, setMarginCut] = useState(t.marginCut);
-  useEffect(() => { setMarginCut(CHANNEL_TYPES[type].marginCut); }, [type]);
-  const reach = contractReach({ type, marginCut });
-  const accept = marginCut >= t.marginCut * 0.9;
+export function ContractModal({ world, onSign, onClose }: { world: World; onSign: (partnerId: string) => void; onClose: () => void }) {
+  const available = RETAIL_PARTNERS.filter((p) => {
+    if (p.industries && !p.industries.includes(world.cfg.id)) return false;
+    if (world.player.contracts.some((c) => c.partnerId === p.id)) return false;
+    return true;
+  });
+  const signed = world.player.contracts;
   return (
-    <Modal onClose={onClose} title="Negotiate Distribution">
-      <FieldLabel>Channel type</FieldLabel>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-        {(Object.entries(CHANNEL_TYPES) as [ChannelType, typeof t][]).map(([k, c]) => (
-          <ChoiceCard key={k} active={type === k} onClick={() => setType(k)}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>{c.label}</div>
-            <div style={{ color: C.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 3 }}>reach {(c.baseReach * 100).toFixed(0)}% · cut {(c.marginCut * 100).toFixed(0)}% · pays in {c.paymentDays}d</div>
-          </ChoiceCard>
+    <Modal onClose={onClose} title="Distribution Partners" wide>
+      {signed.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ color: C.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }}>Active contracts</div>
+          {signed.map((c, i) => (
+            <div key={i} style={{ fontSize: 12, padding: "4px 0", color: C.ink }}>{c.partnerName || c.type} — {(c.marginCut * 100).toFixed(0)}% cut</div>
+          ))}
+        </div>
+      )}
+      <div style={{ color: C.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 8 }}>Available partners</div>
+      {available.length === 0 && <div style={{ color: C.faint, fontSize: 13 }}>All available partners signed or none match your industry.</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, maxHeight: 400, overflowY: "auto" }}>
+        {available.map((p) => (
+          <div key={p.id} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: C.ink }}>{p.name}</div>
+            <div style={{ color: C.dim, fontSize: 11, marginTop: 2, marginBottom: 6 }}>{p.desc}</div>
+            <div style={{ fontSize: 11, color: C.faint, display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              <span>Cut: <span style={{ color: C.amber }}>{(p.marginCut * 100).toFixed(0)}%</span></span>
+              <span>Slotting: <span style={{ color: C.amber }}>{fmtMoney(p.slotting)}/Q</span></span>
+              <span>Pays in: <span style={{ color: p.paymentDays > 60 ? C.red : C.cyan }}>{p.paymentDays}d</span></span>
+              <span>Reach: <span style={{ color: C.cyan }}>{(p.reachMult * 100).toFixed(0)}%</span></span>
+            </div>
+            <button style={{ ...bigBtn, width: "100%", fontSize: 12 }} onClick={() => onSign(p.id)}>Sign with {p.name}</button>
+          </div>
         ))}
       </div>
-      <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 14 }}>
-        <Slider label="Margin cut you concede" min={0} max={0.6} step={0.01} value={marginCut} fmt={(v) => `${(v * 100).toFixed(0)}%`} onChange={setMarginCut} />
-        <Econ k="Slotting / fixed fee" v={fmtMoney(t.slotting) + "/Q"} color={C.amber} />
-        <Econ k="Resulting reach" v={`${(reach * 100).toFixed(0)}%`} color={C.cyan} />
-        <Econ k="Payment terms" v={`${t.paymentDays} days`} color={t.paymentDays > 60 ? C.red : C.violet} />
-        <Econ k="Awareness halo" v={`+${(t.awarenessBoost * reach).toFixed(2)}`} color={C.violet} />
-        <div style={{ marginTop: 8, color: accept ? C.green : C.red, fontSize: 12 }}>{accept ? "✓ Retailer will accept these terms." : "✗ Too low — they'll walk. Concede more margin."}</div>
-        <div style={{ color: C.faint, fontSize: 11, marginTop: 6 }}>Long payment terms tie up cash even when sales are healthy. You keep {((1 - marginCut) * 100).toFixed(0)}% of each sale here.</div>
-      </div>
-      <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        <button style={ctrlBtn} onClick={onClose}>Cancel</button>
-        <button style={{ ...bigBtn, opacity: accept ? 1 : .5 }} disabled={!accept} onClick={() => onSign(type, marginCut)}>Sign contract</button>
+      <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+        <button style={ctrlBtn} onClick={onClose}>Done</button>
       </div>
     </Modal>
   );

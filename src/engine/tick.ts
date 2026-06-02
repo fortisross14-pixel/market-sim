@@ -1,7 +1,7 @@
 import type {
   World, Cell, SKU, Competitor, CellFinance, IncomeStatement, CashFlow, SkuResult,
 } from "./types";
-import { TICKS_PER_QUARTER, TICK_RATE_SCALE, TICKS_PER_MONTH, TICKS_PER_YEAR, DEPT_TIERS } from "./types";
+import { TICKS_PER_QUARTER, TICK_RATE_SCALE, TICKS_PER_MONTH, TICKS_PER_YEAR, DEPT_TIERS, computeProductRarity } from "./types";
 import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum, CHANNEL_TYPES, LICENSES } from "./industries";
 import { fit, effectiveTarget, applyDriftAndShocks, needMatch, effectiveAttributes, packagingResonance, channelFit } from "./cube";
 import { contractReach } from "./economics";
@@ -20,6 +20,16 @@ function skuEffectiveTarget(w: World, sku: SKU) {
   return effectiveTarget(sku.target, pt);
 }
 
+import { VISION_GOALS } from "./types";
+
+// vision bonus: ramps from 1/5 to 5/5 over 4 quarters
+function visionBonus(w: World, bonusType: "quality" | "sales" | "recognition"): number {
+  const v = w.player.vision;
+  if (!v || VISION_GOALS[v.goal].bonusType !== bonusType) return 0;
+  const ramp = (1 + v.quartersPassed) / 5; // 0.2 → 1.0
+  return VISION_GOALS[v.goal].bonusMax * ramp;
+}
+
 export function step(w: World): World {
   const cfg = w.cfg;
   w.tick += 1;
@@ -29,6 +39,9 @@ export function step(w: World): World {
 
   // ease player spend toward targets
   w.player.marketing = ease(w.player.marketing, w.player.marketingTarget, 0.08);
+  // marketing requires marketing personnel — no team, no spend
+  const hasMarketingTeam = w.player.personnel.some((p) => p.role === "marketing");
+  if (!hasMarketingTeam) { w.player.marketing = 0; w.player.brandMarketing = 0; }
   w.player.brandMarketing = ease(w.player.brandMarketing, w.player.brandMarketingTarget, 0.08);
   w.player.backOffice = ease(w.player.backOffice, w.player.backOfficeTarget, 0.08);
 
@@ -82,6 +95,26 @@ export function step(w: World): World {
   // for marketing allocation by cell: track awareness-weighted exposure
   const skuCellRev: number[][] = w.player.skus.map(() => []);
 
+  // ---- design & manufacturing timers ----
+  for (const p of w.player.skus) {
+    if (p.status === "designing") {
+      p.designDaysLeft = Math.max(0, p.designDaysLeft - 1);
+      if (p.designDaysLeft <= 0) {
+        p.status = "designed";
+        // PM is freed (assignedPmId stays for reference but they're no longer locked)
+      }
+    }
+    if (p.status === "manufacturing") {
+      p.mfgDaysLeft = Math.max(0, p.mfgDaysLeft - 1);
+      if (p.mfgDaysLeft <= 0) {
+        p.inventory += p.mfgBatchSize;
+        p.mfgBatchSize = 0;
+        if (p.launchTick === 0) p.launchTick = w.tick; // first manufacture = launch date
+        p.status = "active";
+      }
+    }
+  }
+
   // perceived quality eases toward actual quality, but a large existing customer base ANCHORS the
   // old reputation — so raising quality on a popular product moves perception slowly (the inertia
   // Oscar described: 0.1→0.5 actual lands perception in the middle for a while). New/small products
@@ -95,6 +128,25 @@ export function step(w: World): World {
       const baseRate = 0.02 * TICK_RATE_SCALE;       // fast when unknown
       const rate = baseRate * (1 - anchor) + 0.0015 * TICK_RATE_SCALE; // floor so it always drifts
       p.perceivedQuality = clamp(p.perceivedQuality + (p.quality - p.perceivedQuality) * rate, 0, 1);
+
+      // novelty: decays over the product's lifetime (reaches ~0.1 at end of life)
+      const age = w.tick - p.launchTick;
+      if (p.lifetimeDays > 0) {
+        p.novelty = clamp(1 - (age / p.lifetimeDays) * 0.9, 0.05, 1);
+      }
+
+      // fame: grows with sales volume + marketing exposure + satisfaction, decays slowly without
+      const dailySales = p.unitsSoldTotal / Math.max(1, age);
+      const salesFame = clamp(dailySales / 500, 0, 0.5); // ~500 units/day = max sales fame
+      const mktgFame = clamp(marketingPower * 0.15, 0, 0.2);
+      const custSat = (() => { let s = 0, n = 0; for (const k in w.customers) { s += w.customers[k].satisfaction * w.customers[k].count; n += w.customers[k].count; } return n > 0 ? s / n : 0.5; })();
+      const fameTarget = clamp(salesFame + mktgFame + custSat * 0.2, 0, 1);
+      p.fame = clamp(p.fame + (fameTarget - p.fame) * 0.003 * TICK_RATE_SCALE, 0, 1);
+
+      // rarity: recalculated from current quality + design + novelty + fame + expertise
+      const exp = Math.max(w.player.expertise.category[p.productKey] ?? 0, w.player.expertise.industry[w.cfg.id] ?? 0);
+      const rarityScore = p.quality * 0.2 + p.designQuality * 0.25 + p.novelty * 0.15 + p.fame * 0.25 + exp * 0.06;
+      p.rarity = computeProductRarity(rarityScore);
     }
   }
 
@@ -121,7 +173,7 @@ export function step(w: World): World {
     for (const p of w.player.skus) {
       if (!seenCats.has(p.productKey)) {
         seenCats.add(p.productKey);
-        updateEquity(w, ci, p.productKey, brandPower, brandFocusMatch, equitySignals);
+        updateEquity(w, ci, p.productKey, brandPower * (1 + visionBonus(w, "recognition")), brandFocusMatch, equitySignals);
       }
     }
 
@@ -150,6 +202,7 @@ export function step(w: World): World {
 
     // effective appeal. Static factor (fit×need×category) is cached; price & quality-sensitivity are live.
     const playerEff = w.player.skus.map((p, i) => {
+      if (p.status !== "active") return 0; // not yet on shelves
       const fStatic = w.fitCache[p.id]?.[ci] ?? 0;
       // per-category equity effects
       const eqDemand = equityDemandMult(w, ci, cell, p.productKey);
@@ -158,7 +211,7 @@ export function step(w: World): World {
       const priceTerm = 1 - clamp(p.listPrice / REF_PRICE - 1, -0.6, 0.9) * effPriceSens * 0.5;
       const qTerm = 1 - cell.qualitySens + cell.qualitySens * p.perceivedQuality;
       const aware = (cell.awareness[p.id] ?? 0) * (0.4 + 0.6 * totalReach);
-      return Math.max(0, fStatic * qTerm * priceTerm * eqDemand) * aware;
+      return Math.max(0, fStatic * qTerm * (1 + visionBonus(w, "quality")) * priceTerm * eqDemand * (1 + visionBonus(w, "sales"))) * aware;
     });
     // each competitor's appeal = sum over their products
     const compEff = w.comps.map((c) => {
@@ -249,7 +302,7 @@ export function step(w: World): World {
     if (!seg) { camp.daysRemaining = 0; continue; }
     const campCells = cellsInSegment(w, seg.filter);
     const dailySpend = camp.budget / camp.totalDays;
-    const campPower = clamp(dailySpend / 8000, 0, 1.5); // $8k/day ≈ full power
+    const campPower = clamp(dailySpend / 8000, 0, 1.5) * (camp.effectivenessMult ?? 1); // agency quality matters
     for (const cell of campCells) {
       for (const p of w.player.skus) {
         const fStatic = w.fitCache[p.id]?.[w.cube.indexOf(cell)] ?? 0;
@@ -260,6 +313,12 @@ export function step(w: World): World {
     }
     w.player.cash -= dailySpend;
     camp.daysRemaining -= 1;
+  }
+  // completed campaigns build agency relationships
+  for (const c of w.activeCampaigns) {
+    if (c.daysRemaining <= 0 && c.agencyId) {
+      w.agencyRelationships[c.agencyId] = (w.agencyRelationships[c.agencyId] ?? 0) + 1;
+    }
   }
   w.activeCampaigns = w.activeCampaigns.filter((c) => c.daysRemaining > 0);
 
@@ -300,12 +359,16 @@ export function step(w: World): World {
   const channelCut = grossRevenue * avgMarginCut;
   const netRevenue = grossRevenue - channelCut;
   const contribution = netRevenue - cogs;
-  const slotting = sum(contracts.map((c) => CHANNEL_TYPES[c.type].slotting));
+  const slotting = sum(contracts.map((c) => c.slotting ?? CHANNEL_TYPES[c.type].slotting));
   const marketing = w.player.marketing;
   const brandMarketing = w.player.brandMarketing;
   const backOffice = w.player.backOffice;
   const deptOverhead = (DEPT_TIERS.find((d) => d.tier === w.player.financeDept)?.cost ?? 0)
                      + (DEPT_TIERS.find((d) => d.tier === w.player.intelDept)?.cost ?? 0);
+  // location rent (monthly, prorated to quarterly)
+  const locationCost = w.player.locations.reduce((a, loc) => a + loc.monthlyCost * 3, 0);
+  // personnel salaries (monthly, prorated to quarterly)
+  const personnelCost = w.player.personnel.reduce((a, p) => a + p.salary * 3, 0);
   // licensing: annual fee (per quarter) + per-unit royalty on actual units sold
   let licensingCost = 0;
   for (const sku of w.player.skus) {
@@ -327,13 +390,13 @@ export function step(w: World): World {
     }
   });
   licensingCost += unitRoyalties;
-  const ebitda = contribution - marketing - brandMarketing - slotting - backOffice - deptOverhead - licensingCost;
+  const ebitda = contribution - marketing - brandMarketing - slotting - backOffice - deptOverhead - licensingCost - locationCost - personnelCost;
   const interest = w.player.debt * 0.10 / 4; // 10% annual, per quarter
   const profit = ebitda - interest;
 
   const income: IncomeStatement = {
     grossRevenue, channelCut, netRevenue, cogs, contribution,
-    marketing, brandMarketing, slotting, backOffice, deptOverhead, licensingCost, ebitda, interest, profit,
+    marketing, brandMarketing, slotting, backOffice, deptOverhead, licensingCost, locationCost, personnelCost, ebitda, interest, profit,
   };
 
   // ---- working capital / cash flow ----
@@ -352,7 +415,7 @@ export function step(w: World): World {
   const receivablesOutstanding = sum(w.player.receivables.map((r) => r.amount));
 
   // costs paid out immediately this tick (COGS already paid when produced as inventory; here pay opex)
-  const opexTick = (marketing + brandMarketing + slotting + backOffice + deptOverhead + licensingCost + interest) / TICKS_PER_QUARTER;
+  const opexTick = (marketing + brandMarketing + slotting + backOffice + deptOverhead + licensingCost + locationCost + personnelCost + interest) / TICKS_PER_QUARTER;
   // cash moves by collections minus opex (COGS was paid at production time)
   w.player.cash += collected - opexTick;
 
@@ -393,6 +456,28 @@ export function step(w: World): World {
 
   for (const st of w.studies) {
     if (!st.done) { st.ticksLeft -= 1; if (st.ticksLeft <= 0) { st.done = true; w.revealed[st.type] = { ...computeStudyFact(w, st.type), asOfTick: w.tick }; } }
+  }
+
+  // ---- expertise: grows with cumulative sales per category ----
+  // thresholds: 0→1 at 10k units, 1→2 at 50k, 2→3 at 200k, 3→4 at 800k, 4→5 at 3M
+  const EXP_THRESHOLDS = [0, 10_000, 50_000, 200_000, 800_000, 3_000_000];
+  const catUnits: Record<string, number> = {};
+  for (const s of w.player.skus) catUnits[s.productKey] = (catUnits[s.productKey] ?? 0) + s.unitsSoldTotal;
+  for (const pk in catUnits) {
+    let stars = 0;
+    for (let i = 1; i < EXP_THRESHOLDS.length; i++) { if (catUnits[pk] >= EXP_THRESHOLDS[i]) stars = i; }
+    w.player.expertise.category[pk] = stars;
+  }
+  // industry expertise = max of category expertises
+  const indUnits = Object.values(catUnits).reduce((a, b) => a + b, 0);
+  let indStars = 0;
+  for (let i = 1; i < EXP_THRESHOLDS.length; i++) { if (indUnits >= EXP_THRESHOLDS[i] * 2) indStars = i; }
+  w.player.expertise.industry[w.cfg.id] = indStars;
+
+  // ---- vision bonus ramp: 1/5 at creation, +1/5 per quarter, max at 4 quarters ----
+  if (w.player.vision) {
+    const ticksSinceSet = w.tick - w.player.vision.setTick;
+    w.player.vision.quartersPassed = Math.min(4, Math.floor(ticksSinceSet / TICKS_PER_QUARTER));
   }
 
   w.history.push({

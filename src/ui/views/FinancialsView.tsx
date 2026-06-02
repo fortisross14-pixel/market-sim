@@ -88,6 +88,8 @@ export function FinancialsView({ world, hist, borrow, repay }:
           <Row k="− Back office" v={fmtMoney(-I.backOffice)} indent />
           <Row k="− Departments" v={fmtMoney(-I.deptOverhead)} indent />
           {I.licensingCost > 0 && <Row k="− Licensing" v={fmtMoney(-I.licensingCost)} indent />}
+          {I.locationCost > 0 && <Row k="− Locations" v={fmtMoney(-I.locationCost)} indent />}
+          {I.personnelCost > 0 && <Row k="− Personnel" v={fmtMoney(-I.personnelCost)} indent />}
           <Row k="EBITDA" v={fmtMoney(I.ebitda)} strong />
           <Row k="− Interest" v={fmtMoney(-I.interest)} indent />
           <Row k="Net profit" v={fmtMoney(I.profit)} strong />

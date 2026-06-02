@@ -76,6 +76,7 @@ export interface ProductType {
   // who is naturally inclined to this CATEGORY (affinity lean per demographic axis, -1..1).
   // e.g. action figures: young + male; anti-aging: older. Drives categoryPref per segment.
   categoryLean?: Partial<Record<AxisKey, number>>;
+  lifetimeDays: number; // how long novelty lasts (360=1yr, 3600=10yr, 36000=100yr like Coke)
 }
 
 export interface CompetitorSeed {
@@ -127,25 +128,68 @@ export interface Competitor {
 
 export type ProductMethod = "outsource" | "own";
 
+export type ProductRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+
+export const PRODUCT_RARITY_DEFS: Record<ProductRarity, { label: string; color: string; minScore: number }> = {
+  common:    { label: "Common",    color: "#9ca3af", minScore: 0 },
+  uncommon:  { label: "Uncommon",  color: "#34d399", minScore: 0.25 },
+  rare:      { label: "Rare",      color: "#38bdf8", minScore: 0.45 },
+  epic:      { label: "Epic",      color: "#c084fc", minScore: 0.65 },
+  legendary: { label: "Legendary", color: "#fbbf24", minScore: 0.82 },
+};
+
+export function computeProductRarity(score: number): ProductRarity {
+  if (score >= 0.82) return "legendary";
+  if (score >= 0.65) return "epic";
+  if (score >= 0.45) return "rare";
+  if (score >= 0.25) return "uncommon";
+  return "common";
+}
+
+export type ProductStatus = "designing" | "designed" | "manufacturing" | "active";
+export type DesignDepth = "quick" | "normal" | "detailed";
+
+export const DESIGN_DEPTHS: Record<DesignDepth, { label: string; days: number; qualityMult: number; desc: string }> = {
+  quick:    { label: "Quick",    days: 14,  qualityMult: 0.7, desc: "2 weeks. Lower design quality but fast to market." },
+  normal:   { label: "Normal",   days: 45,  qualityMult: 1.0, desc: "6 weeks. Balanced quality and speed." },
+  detailed: { label: "Detailed", days: 90,  qualityMult: 1.3, desc: "3 months. Highest design quality, slow." },
+};
+
 export interface SKU {
   id: string;
   name: string;
   productKey: string;
   method: ProductMethod;
   target: Record<AxisKey, number>;
-  quality: number;          // actual quality you build (drives unit cost)
-  perceivedQuality: number; // what the market believes — lags actual, anchored by existing customers
+  // lifecycle status
+  status: ProductStatus;
+  assignedPmId: string | null;
+  designDepth: DesignDepth;
+  designDaysLeft: number;    // counts down during "designing"
+  mfgDaysLeft: number;       // counts down during "manufacturing"
+  mfgBatchSize: number;      // units being manufactured in current batch
+  // quality
+  quality: number;          // manufacturing quality (materials + production)
+  designQuality: number;   // from design decisions + PM skill + depth
+  perceivedQuality: number; // what the market believes
+  novelty: number;         // 0..1, starts high, decays over product lifetime
+  fame: number;            // 0..1, grows with sales + marketing + satisfaction
+  rarity: ProductRarity;   // derived from quality + design + novelty + fame + expertise
+  lifetimeDays: number;    // how long until novelty fully decays
+  launchTick: number;      // when the product started selling (set when first manufactured)
+  // economics
   unitCost: number;
   listPrice: number;
   priceSens: number;
-  inventory: number; // units in stock
-  online: number; // 0..1 online readiness
-  attributes: Record<string, number>; // need vector (0..1 per need key)
-  packaging: string; // packaging preset key
-  channels: ChannelType[]; // which company channels carry THIS product
-  license: string | null; // license key or null (no license)
-  unitsSoldTotal: number;   // cumulative lifetime units
-  contributionTotal: number; // cumulative lifetime contribution ($)
+  inventory: number;
+  online: number;
+  attributes: Record<string, number>;
+  packaging: string;
+  channels: ChannelType[];
+  assignedPartnerIds: string[]; // which retail partners carry this product
+  license: string | null;
+  unitsSoldTotal: number;
+  contributionTotal: number;
 }
 
 export type ChannelType = "retail" | "marketplace" | "ownweb" | "flagship";
@@ -163,6 +207,10 @@ export interface ChannelDef {
 export interface Contract {
   type: ChannelType;
   marginCut: number; // negotiated
+  partnerId: string;  // RETAIL_PARTNERS[].id
+  partnerName: string;
+  slotting: number;   // quarterly slotting from partner terms
+  paymentDays: number;
 }
 
 // ---- Finance (Milestone 1) ----
@@ -187,6 +235,8 @@ export interface IncomeStatement {
   backOffice: number;
   deptOverhead: number;
   licensingCost: number;
+  locationCost: number;
+  personnelCost: number;
   ebitda: number;
   interest: number;
   profit: number;
@@ -232,7 +282,88 @@ export interface Brand {
   positioning: string;
 }
 
+// ---- Vision ----
+export type VisionGoal = "quality" | "sales" | "recognition";
+export interface Vision {
+  goal: VisionGoal;           // best / most sold / most valued
+  scope: string;              // industry id OR product key
+  audience: string;           // "anyone" or a saved segment id
+  audienceLabel: string;      // display name
+  setTick: number;            // when this vision was set
+  quartersPassed: number;     // how many full quarters since setTick (max 4)
+}
+
+export const VISION_GOALS: Record<VisionGoal, { label: string; adjective: string; bonusType: string; bonusMax: number; desc: string }> = {
+  quality:     { label: "Quality",     adjective: "best",       bonusType: "quality",     bonusMax: 0.15, desc: "+15% design quality at full ramp" },
+  sales:       { label: "Sales",       adjective: "most sold",  bonusType: "sales",       bonusMax: 0.20, desc: "+20% demand at full ramp" },
+  recognition: { label: "Recognition", adjective: "most valued", bonusType: "recognition", bonusMax: 0.25, desc: "+25% brand equity gain at full ramp" },
+};
+
 export type DeptTier = 0 | 1 | 2 | 3; // 0=none, 1=small, 2=medium, 3=large
+
+// ---- Locations ----
+export type LocationType = "office" | "warehouse" | "factory_onshore" | "factory_offshore";
+export interface Location {
+  id: string;
+  type: LocationType;
+  tier: number; // 0=small, 1=medium, 2=large
+  monthlyCost: number;
+}
+
+export const LOCATION_DEFS: Record<LocationType, { label: string; tiers: { label: string; monthlyCost: number; setupCost: number; capacity: number; desc: string }[] }> = {
+  office: { label: "Office", tiers: [
+    { label: "Small Office", monthlyCost: 8_000, setupCost: 0, capacity: 2, desc: "Basic teams + up to 2 PM teams." },
+    { label: "Medium Office", monthlyCost: 20_000, setupCost: 50_000, capacity: 5, desc: "Expanded teams, up to 5 PM teams." },
+    { label: "Large Office", monthlyCost: 40_000, setupCost: 150_000, capacity: 10, desc: "Full departments, up to 10 PM teams." },
+  ]},
+  warehouse: { label: "Warehouse", tiers: [
+    { label: "Small Warehouse", monthlyCost: 5_000, setupCost: 0, capacity: 3, desc: "Store up to 3 product lines." },
+    { label: "Medium Warehouse", monthlyCost: 12_000, setupCost: 30_000, capacity: 7, desc: "Up to 7 product lines." },
+    { label: "Large Warehouse", monthlyCost: 25_000, setupCost: 80_000, capacity: 12, desc: "Up to 12 product lines." },
+  ]},
+  factory_onshore: { label: "Factory (Onshore)", tiers: [
+    { label: "Small Onshore", monthlyCost: 15_000, setupCost: 200_000, capacity: 50_000, desc: "50k units/month capacity. Higher quality." },
+    { label: "Medium Onshore", monthlyCost: 30_000, setupCost: 400_000, capacity: 150_000, desc: "150k units/month." },
+    { label: "Large Onshore", monthlyCost: 50_000, setupCost: 800_000, capacity: 400_000, desc: "400k units/month." },
+  ]},
+  factory_offshore: { label: "Factory (Offshore)", tiers: [
+    { label: "Small Offshore", monthlyCost: 8_000, setupCost: 100_000, capacity: 80_000, desc: "80k units/month. Lower cost, lower quality ceiling." },
+    { label: "Medium Offshore", monthlyCost: 18_000, setupCost: 250_000, capacity: 250_000, desc: "250k units/month." },
+    { label: "Large Offshore", monthlyCost: 35_000, setupCost: 500_000, capacity: 600_000, desc: "600k units/month." },
+  ]},
+};
+
+// ---- Personnel ----
+export type PersonnelRole = "product_manager" | "finance" | "marketing" | "strategy" | "operations";
+export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+
+export interface Personnel {
+  id: string;
+  name: string;
+  role: PersonnelRole;
+  rarity: Rarity;
+  salary: number; // monthly
+  skill: number;  // 0..1, drives quality/cost impact
+}
+
+export const RARITY_DEFS: Record<Rarity, { label: string; color: string; salaryMult: number; skillRange: [number, number] }> = {
+  common:    { label: "Common",    color: "#9ca3af", salaryMult: 1.0, skillRange: [0.15, 0.35] },
+  uncommon:  { label: "Uncommon",  color: "#34d399", salaryMult: 1.6, skillRange: [0.30, 0.50] },
+  rare:      { label: "Rare",      color: "#38bdf8", salaryMult: 2.5, skillRange: [0.45, 0.65] },
+  epic:      { label: "Epic",      color: "#c084fc", salaryMult: 4.0, skillRange: [0.60, 0.80] },
+  legendary: { label: "Legendary", color: "#fbbf24", salaryMult: 7.0, skillRange: [0.80, 0.95] },
+};
+
+export const BASE_SALARIES: Record<PersonnelRole, number> = {
+  product_manager: 6_000, finance: 4_500, marketing: 5_000, strategy: 5_500, operations: 4_000,
+};
+
+// ---- Expertise ----
+// per industry + per product category, 0..5 stars, earned from cumulative sales
+export interface Expertise {
+  industry: Record<string, number>; // industry id -> 0..5
+  category: Record<string, number>; // product key -> 0..5
+}
 
 export interface PlayerState {
   skus: SKU[];
@@ -240,17 +371,21 @@ export interface PlayerState {
   marketing: number;
   marketingTarget: number;
   marketingFocus: string;
-  brandMarketing: number;        // smoothed current brand-marketing spend
-  brandMarketingTarget: number;  // builds equity, not awareness
+  brandMarketing: number;
+  brandMarketingTarget: number;
   backOffice: number;
   backOfficeTarget: number;
   cash: number;
   debt: number;
   lostSales: number;
   receivables: Receivable[];
-  // departments: higher tier = more visibility, but more overhead cost per quarter
-  financeDept: DeptTier;    // gates Financials tab detail
-  intelDept: DeptTier;      // gates Market, Strategy, Intelligence tab detail
+  financeDept: DeptTier;
+  intelDept: DeptTier;
+  // new: organizational infrastructure
+  locations: Location[];
+  personnel: Personnel[];
+  expertise: Expertise;
+  vision: Vision | null;
 }
 
 export const DEPT_TIERS: { tier: DeptTier; label: string; cost: number; detail: string }[] = [
@@ -289,9 +424,11 @@ export interface Campaign {
   id: string;
   name: string;
   segmentId: string;     // saved segment id to target
+  agencyId: string;      // which agency runs it
   budget: number;        // total spend
   daysRemaining: number; // ticks left
   totalDays: number;     // original duration
+  effectivenessMult: number; // from agency
 }
 
 export interface World {
@@ -326,6 +463,7 @@ export interface World {
   // rolling per-tick actual units sold and market consumed, for day/month/year share windows.
   // active one-off marketing campaigns (time-limited, segment-targeted awareness boosts)
   activeCampaigns: Campaign[];
+  agencyRelationships: Record<string, number>; // agency id -> campaigns completed (builds trust)
   unitsTickHistory: number[];
   marketTickHistory: number[];
 }

@@ -1,9 +1,10 @@
-import React from "react";
-import { C, fmtMoney } from "../theme";
+import React, { useState } from "react";
+import { C, fmtMoney, bigBtn, ctrlBtn } from "../theme";
 import { Panel, Slider, FieldLabel } from "../components";
 import { brandAverageEquity, earnedSignals, getEquity, type Equity } from "../../engine/brandEquity";
 import { segmentStats } from "../../engine/segments";
-import type { World } from "../../engine/types";
+import type { World, VisionGoal } from "../../engine/types";
+import { VISION_GOALS } from "../../engine/types";
 
 const METRICS: { key: keyof Equity; label: string; color: string }[] = [
   { key: "trust", label: "Trust", color: "#34d399" },
@@ -12,10 +13,11 @@ const METRICS: { key: keyof Equity; label: string; color: string }[] = [
   { key: "innovation", label: "Innovation", color: "#fbbf24" },
 ];
 
-export function BrandView({ world, setMarketing, setBrandMarketing }: {
+export function BrandView({ world, setMarketing, setBrandMarketing, setVision }: {
   world: World;
   setMarketing: (v: number) => void;
   setBrandMarketing: (v: number) => void;
+  setVision: (goal: VisionGoal, scope: string, audience: string, audienceLabel: string) => void;
 }) {
   const avg = brandAverageEquity(world);
   const earned = earnedSignals(world);
@@ -40,6 +42,7 @@ export function BrandView({ world, setMarketing, setBrandMarketing }: {
 
   return (
     <div>
+      <VisionPanel world={world} setVision={setVision} />
       <Panel title="Marketing Split">
         <div style={{ color: C.dim, fontSize: 13, marginBottom: 14, lineHeight: 1.5 }}>
           Performance marketing drives awareness and sales now. Brand marketing builds equity — it doesn't move this quarter's sales, but it compounds and gives every future product a head-start.
@@ -125,5 +128,113 @@ export function BrandView({ world, setMarketing, setBrandMarketing }: {
         </Panel>
       )}
     </div>
+  );
+}
+
+function VisionPanel({ world, setVision }: { world: World; setVision: (goal: VisionGoal, scope: string, audience: string, audienceLabel: string) => void }) {
+  const v = world.player.vision;
+  const [goal, setGoal] = useState<VisionGoal>(v?.goal ?? "quality");
+  const [scope, setScope] = useState(v?.scope ?? world.cfg.id);
+  const [audience, setAudience] = useState(v?.audience ?? "anyone");
+
+  const goalDef = VISION_GOALS[goal];
+  const scopeLabel = scope === world.cfg.id
+    ? world.cfg.label
+    : world.cfg.products.find((p) => p.key === scope)?.label ?? scope;
+  const audienceLabel = audience === "anyone"
+    ? "everyone"
+    : world.savedSegments.find((s) => s.id === audience)?.name ?? audience;
+  const statement = `"We want to be the ${goalDef.adjective} ${scopeLabel} company for ${audienceLabel}."`;
+
+  const ramp = v ? (1 + v.quartersPassed) / 5 : 0;
+  const currentBonus = v ? VISION_GOALS[v.goal].bonusMax * ramp : 0;
+
+  return (
+    <Panel title="Company Vision">
+      {v && (
+        <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, fontStyle: "italic", marginBottom: 8 }}>
+            {`"We want to be the ${VISION_GOALS[v.goal].adjective} ${v.scope === world.cfg.id ? world.cfg.label : world.cfg.products.find((p) => p.key === v.scope)?.label ?? v.scope} company for ${v.audienceLabel}."`}
+          </div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
+            <div>
+              <span style={{ color: C.dim }}>Bonus: </span>
+              <span style={{ color: C.green, fontWeight: 600 }}>{VISION_GOALS[v.goal].desc}</span>
+            </div>
+            <div>
+              <span style={{ color: C.dim }}>Ramp: </span>
+              <span style={{ color: C.amber, fontWeight: 600 }}>{(ramp * 100).toFixed(0)}%</span>
+              <span style={{ color: C.faint }}> ({v.quartersPassed}/4 quarters)</span>
+            </div>
+            <div>
+              <span style={{ color: C.dim }}>Current effect: </span>
+              <span style={{ color: C.cyan, fontWeight: 600 }}>+{(currentBonus * 100).toFixed(1)}%</span>
+            </div>
+          </div>
+          <div style={{ height: 6, background: C.grid, borderRadius: 3, marginTop: 10 }}>
+            <div style={{ width: `${ramp * 100}%`, height: "100%", background: C.amber, borderRadius: 3, transition: "width 0.3s" }} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+        Set your company vision. The bonus takes 1 year to reach full strength (20% per quarter). Changing the vision resets the ramp.
+      </div>
+
+      <div style={{ color: C.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }}>Target goal</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {(Object.keys(VISION_GOALS) as VisionGoal[]).map((g) => {
+          const gd = VISION_GOALS[g];
+          return (
+            <button key={g} onClick={() => setGoal(g)} style={{
+              flex: 1, background: goal === g ? C.panel2 : C.bg,
+              border: `1px solid ${goal === g ? C.cyan : C.line}`, borderRadius: 8,
+              padding: "10px 8px", cursor: "pointer", textAlign: "left",
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: goal === g ? C.ink : C.dim }}>{gd.adjective}</div>
+              <div style={{ fontSize: 10, color: C.faint, marginTop: 2 }}>{gd.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ color: C.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }}>Scope (industry or product)</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
+        <button onClick={() => setScope(world.cfg.id)} style={{
+          background: scope === world.cfg.id ? C.cyan : C.panel2, color: scope === world.cfg.id ? "#06121c" : C.dim,
+          border: `1px solid ${scope === world.cfg.id ? C.cyan : C.line}`, borderRadius: 5, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+        }}>{world.cfg.label}</button>
+        {world.cfg.products.map((pt) => (
+          <button key={pt.key} onClick={() => setScope(pt.key)} style={{
+            background: scope === pt.key ? C.cyan : C.panel2, color: scope === pt.key ? "#06121c" : C.dim,
+            border: `1px solid ${scope === pt.key ? C.cyan : C.line}`, borderRadius: 5, padding: "5px 10px", fontSize: 12, cursor: "pointer",
+          }}>{pt.label}</button>
+        ))}
+      </div>
+
+      <div style={{ color: C.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }}>Target audience</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
+        <button onClick={() => setAudience("anyone")} style={{
+          background: audience === "anyone" ? C.cyan : C.panel2, color: audience === "anyone" ? "#06121c" : C.dim,
+          border: `1px solid ${audience === "anyone" ? C.cyan : C.line}`, borderRadius: 5, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+        }}>Everyone</button>
+        {world.savedSegments.map((seg) => (
+          <button key={seg.id} onClick={() => setAudience(seg.id)} style={{
+            background: audience === seg.id ? C.cyan : C.panel2, color: audience === seg.id ? "#06121c" : C.dim,
+            border: `1px solid ${audience === seg.id ? C.cyan : C.line}`, borderRadius: 5, padding: "5px 10px", fontSize: 12, cursor: "pointer",
+          }}>{seg.name}</button>
+        ))}
+      </div>
+
+      <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 15, fontStyle: "italic", color: C.ink, fontWeight: 600 }}>{statement}</div>
+        <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>Bonus: {goalDef.desc} · Full effect in 4 quarters</div>
+      </div>
+
+      <button style={{ ...bigBtn, width: "100%", background: C.cyan, color: "#06121c" }}
+        onClick={() => setVision(goal, scope, audience, audienceLabel)}>
+        {v ? "Change vision (resets ramp)" : "Set company vision"}
+      </button>
+    </Panel>
   );
 }
