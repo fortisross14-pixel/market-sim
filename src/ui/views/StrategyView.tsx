@@ -65,7 +65,7 @@ export function StrategyView({ world }: { world: World }) {
       </div>
 
       <Panel title="Portfolio — BCG Matrix">
-        {bcg.length === 0 ? <div style={{ color: C.faint, fontSize: 13 }}>No products yet.</div> : <BcgMatrix items={bcg} brandColor={world.brand.color} />}
+        {bcg.length === 0 ? <div style={{ color: C.faint, fontSize: 13 }}>No products yet.</div> : <BcgMatrix items={bcg} brandColor={C.violet} />}
       </Panel>
 
       <Panel title="Product Analysis — where each product fits">
@@ -73,7 +73,7 @@ export function StrategyView({ world }: { world: World }) {
           computeProductAnalysis(world).map((pa, i) => (
             <div key={i} style={{ marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${C.grid}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <span style={{ color: world.brand.color, fontWeight: 600 }}>{pa.sku}</span>
+                <span style={{ color: C.violet, fontWeight: 600 }}>{pa.sku}</span>
                 <span style={{ color: C.dim, fontSize: 11 }}>serves: {pa.topNeeds.map((n) => `${n.label} ${(n.value * 100).toFixed(0)}`).join(" · ")}</span>
               </div>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>

@@ -36,7 +36,7 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
   const canStart = name.trim().length > 0;
 
   return (
-    <Modal onClose={onClose} title={<>New Product — <span style={{ color: world.brand.color }}>{world.brand.name}</span></>} wide>
+    <Modal onClose={onClose} title={<>New Product — <span style={{ color: C.violet }}>{world.brand.name}</span></>} wide>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         <div>
           <FieldLabel>Product type</FieldLabel>
@@ -79,7 +79,7 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
           <FieldLabel>Production</FieldLabel>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             {Object.entries(METHODS).map(([k, m]) => (
-              <ChoiceCard key={k} active={method === k} disabled={!m.available} onClick={() => m.available && setMethod(k as "outsource" | "own")} accent={world.brand.color}>
+              <ChoiceCard key={k} active={method === k} disabled={!m.available} onClick={() => m.available && setMethod(k as "outsource" | "own")} accent={C.violet}>
                 <div style={{ fontWeight: 700, fontSize: 13 }}>{m.label}</div>
                 <div style={{ color: C.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 3 }}>{m.note}</div>
               </ChoiceCard>
@@ -127,7 +127,7 @@ export function ProductCreator({ world, onCreate, onClose }: { world: World; onC
       </div>
       <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <button style={ctrlBtn} onClick={onClose}>Cancel</button>
-        <button style={{ ...bigBtn, background: world.brand.color, opacity: canStart ? 1 : .5 }} disabled={!canStart}
+        <button style={{ ...bigBtn, background: C.violet, opacity: canStart ? 1 : .5 }} disabled={!canStart}
           onClick={() => onCreate({ name, productKey, method, materialsQ, productionQ, online, listPrice, gAge: 0.5, gClass: 0.5, gGender: 0.5, gLeaning: 0.5, gGeography: 0.5, gFamily: 0.5, attributes, designDepth })}>
           Start Design ({depthDef.days} days) & launch
         </button>
@@ -148,7 +148,7 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
   const pt = world.cfg.products.find((p) => p.key === sku.productKey)!;
   const availableChannels = Array.from(new Set(world.player.contracts.map((c) => c.type)));
   return (
-    <Modal onClose={onClose} title={<>Distribution & Sales — <span style={{ color: world.brand.color }}>{sku.name}</span></>} wide>
+    <Modal onClose={onClose} title={<>Distribution & Sales — <span style={{ color: C.violet }}>{sku.name}</span></>} wide>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         <div>
           <FieldLabel>Packaging</FieldLabel>
@@ -160,7 +160,7 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
               const amp = Object.keys(bias).map((k) => world.cfg.needs.find((n) => n.key === k)?.label).filter(Boolean).join(", ");
               return (
                 <button key={pk.key} onClick={() => setPackaging(skuIndex, pk.key)}
-                  style={{ textAlign: "left", background: on ? C.panel2 : C.bg, border: `1px solid ${on ? world.brand.color : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
+                  style={{ textAlign: "left", background: on ? C.panel2 : C.bg, border: `1px solid ${on ? C.violet : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
                   <div style={{ fontWeight: 600, fontSize: 12.5 }}>{pk.label}</div>
                   <div style={{ color: C.dim, fontSize: 10, marginTop: 2 }}>
                     {pk.ageLean < -0.2 ? "skews young" : pk.ageLean > 0.2 ? "skews older" : "age-neutral"}{pk.classLean > 0.3 ? " · premium" : pk.classLean < -0.2 ? " · budget" : ""}
@@ -189,9 +189,9 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
                   const on = sku.channels.includes(ch);
                   return (
                     <div key={ch} onClick={() => toggleChannel(skuIndex, ch)}
-                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 6, background: on ? C.panel : "transparent", border: `1px solid ${on ? world.brand.color : C.line}`, borderRadius: 8, cursor: "pointer" }}>
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 6, background: on ? C.panel : "transparent", border: `1px solid ${on ? C.violet : C.line}`, borderRadius: 8, cursor: "pointer" }}>
                       <span style={{ color: C.ink, fontSize: 13 }}>{CHANNEL_TYPES[ch].label}</span>
-                      <span style={{ color: on ? world.brand.color : C.faint, fontSize: 12, fontWeight: 600 }}>{on ? "✓ carrying" : "off"}</span>
+                      <span style={{ color: on ? C.violet : C.faint, fontSize: 12, fontWeight: 600 }}>{on ? "✓ carrying" : "off"}</span>
                     </div>
                   );
                 })}
@@ -210,7 +210,7 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
         <div style={{ color: C.faint, fontSize: 11, marginBottom: 8 }}>A license boosts the "licensed" and "collectible" appeal — huge for toys, modest for skincare. Costs an annual fee + per-unit royalty.</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6, maxHeight: 260, overflowY: "auto" }}>
           <button onClick={() => setLicense(skuIndex, null)}
-            style={{ textAlign: "left", background: !sku.license ? C.panel2 : C.bg, border: `1px solid ${!sku.license ? world.brand.color : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
+            style={{ textAlign: "left", background: !sku.license ? C.panel2 : C.bg, border: `1px solid ${!sku.license ? C.violet : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
             <div style={{ fontWeight: 600, fontSize: 12 }}>No license</div>
             <div style={{ color: C.dim, fontSize: 10 }}>Save on royalties</div>
           </button>
@@ -219,7 +219,7 @@ export function DistributionModal({ world, skuIndex, setPackaging, setProductPri
             const cm = lic.categoryMult[world.cfg.id] ?? 1;
             return (
               <button key={lic.key} onClick={() => setLicense(skuIndex, lic.key)}
-                style={{ textAlign: "left", background: on ? C.panel2 : C.bg, border: `1px solid ${on ? world.brand.color : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
+                style={{ textAlign: "left", background: on ? C.panel2 : C.bg, border: `1px solid ${on ? C.violet : C.line}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: C.ink }}>
                 <div style={{ fontWeight: 600, fontSize: 12 }}>{lic.label}</div>
                 <div style={{ color: C.dim, fontSize: 10 }}>{lic.tier} · {fmtMoney(lic.annualFee)}/yr + ${lic.unitRoyalty.toFixed(2)}/unit</div>
                 <div style={{ color: cm > 1 ? C.green : cm < 0.5 ? C.red : C.dim, fontSize: 10 }}>

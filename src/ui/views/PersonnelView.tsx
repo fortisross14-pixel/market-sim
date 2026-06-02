@@ -119,7 +119,7 @@ function DeptSelector({ label, tier, onChange }: { label: string; tier: DeptTier
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {DEPT_TIERS.map((d) => (
           <button key={d.tier} onClick={() => onChange(d.tier)}
-            style={{ background: tier === d.tier ? C.cyan : C.panel2, color: tier === d.tier ? "#06121c" : C.dim, border: `1px solid ${tier === d.tier ? C.cyan : C.line}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer", flex: "1 1 0" }}>
+            style={{ background: tier === d.tier ? C.cyan : C.panel2, color: tier === d.tier ? "#fff" : C.dim, border: `1px solid ${tier === d.tier ? C.cyan : C.line}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer", flex: "1 1 0" }}>
             <div style={{ fontWeight: 600 }}>{d.label}</div>
             {d.cost > 0 && <div style={{ fontSize: 10, opacity: 0.8 }}>{fmtMoney(d.cost)}/Q</div>}
           </button>

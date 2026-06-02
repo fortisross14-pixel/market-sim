@@ -67,7 +67,7 @@ export function SetupWizard({ onLaunch }: { onLaunch: (id: string, company: stri
             <div style={{ height: 16 }} />
             <FieldLabel>Brand color</FieldLabel>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {BRAND_COLORS.map((c) => <button key={c} onClick={() => setBrand({ ...brand, color: c })} style={{ width: 32, height: 32, borderRadius: 8, background: c, border: brand.color === c ? "2px solid #fff" : "2px solid transparent", cursor: "pointer" }} />)}
+              {BRAND_COLORS.map((c) => <button key={c} onClick={() => setBrand({ ...brand, color: c })} style={{ width: 32, height: 32, borderRadius: 8, background: c, border: brand.color === c ? `3px solid ${C.violet}` : "2px solid transparent", cursor: "pointer", boxShadow: brand.color === c ? "0 0 0 2px #fff" : "none" }} />)}
             </div>
             <div style={{ height: 16 }} />
             <FieldLabel>Positioning</FieldLabel>

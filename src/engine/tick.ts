@@ -2,7 +2,7 @@ import type {
   World, Cell, SKU, Competitor, CellFinance, IncomeStatement, CashFlow, SkuResult,
 } from "./types";
 import { TICKS_PER_QUARTER, TICK_RATE_SCALE, TICKS_PER_MONTH, TICKS_PER_YEAR, DEPT_TIERS, computeProductRarity } from "./types";
-import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum, CHANNEL_TYPES, LICENSES } from "./industries";
+import { AXES, AXIS_KEYS, axisPos, clamp, ease, sum, CHANNEL_TYPES, LICENSES, INDUSTRIES } from "./industries";
 import { fit, effectiveTarget, applyDriftAndShocks, needMatch, effectiveAttributes, packagingResonance, channelFit } from "./cube";
 import { contractReach } from "./economics";
 import { runCompetitorBrains, competitorAwareness } from "./competitorBrain";
@@ -22,12 +22,15 @@ function skuEffectiveTarget(w: World, sku: SKU) {
 
 import { VISION_GOALS } from "./types";
 
-// vision bonus: ramps from 1/5 to 5/5 over 4 quarters
+// vision bonus: ramps from 1/5 to 5/5 over 4 quarters. Product scope = 20%, industry = 10%.
 function visionBonus(w: World, bonusType: "quality" | "sales" | "recognition"): number {
   const v = w.player.vision;
   if (!v || VISION_GOALS[v.goal].bonusType !== bonusType) return 0;
   const ramp = (1 + v.quartersPassed) / 5; // 0.2 → 1.0
-  return VISION_GOALS[v.goal].bonusMax * ramp;
+  // is scope an industry id or a product key? If it matches an industry, lower bonus.
+  const isIndustry = Object.keys(INDUSTRIES).includes(v.scope);
+  const max = isIndustry ? VISION_GOALS[v.goal].bonusMaxIndustry : VISION_GOALS[v.goal].bonusMaxProduct;
+  return max * ramp;
 }
 
 export function step(w: World): World {
@@ -188,12 +191,15 @@ export function step(w: World): World {
       const distPresence = totalReach * 0.6 + onlineCoverage * onlineFit * 0.4;
       const focusLift = 1 + marketingPower * (focusMatch - 1) * 0.6 * concentrationBoost;
       const eqAwareLift = trustAwarenessLift(w, ci, p.productKey);
-      const mktgCeil = 0.4 + 0.6 * clamp(marketingPower * focusMatch, 0, 1);
+      // ceiling: distribution alone gets you moderate awareness (people see it on shelves).
+      // Marketing raises the ceiling further. No marketing + no distribution = zero.
+      const shelfVisibility = clamp(distPresence * 0.5, 0, 0.3); // shelf presence alone -> up to 30% aware
+      const mktgCeil = shelfVisibility + clamp(marketingPower * focusMatch, 0, 1) * 0.7;
       const push = clamp(fStatic * (0.35 + 0.65 * distPresence) * Math.max(0.2, focusLift) * eqAwareLift * mktgCeil);
       const cur = cell.awareness[p.id] || 0;
       const speed = push >= cur
-        ? clamp(0.010 * TICK_RATE_SCALE * (0.3 + marketingPower * focusMatch + 0.6 * awarenessBoost))
-        : 0.012 * TICK_RATE_SCALE;
+        ? clamp(0.012 * TICK_RATE_SCALE * (0.4 + marketingPower * focusMatch + 0.5 * distPresence + 0.6 * awarenessBoost))
+        : 0.010 * TICK_RATE_SCALE;
       cell.awareness[p.id] = clamp(cur + (push - cur) * speed);
     }
 

@@ -23,20 +23,20 @@ export function OperationsView({ world, produce, openCreator, openContract, remo
           return (
             <div key={si} style={{ marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${C.grid}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: world.brand.color, fontWeight: 600 }}>{sku.name}</span>
+                <span style={{ color: C.violet, fontWeight: 600 }}>{sku.name}</span>
                 <span style={{ color: sku.inventory < 1 ? C.red : C.dim, fontSize: 11, fontFamily: "ui-monospace" }}>stock {fmtNum(sku.inventory)}</span>
               </div>
               <div style={{ color: C.faint, fontSize: 11, margin: "2px 0 6px" }}>
                 ${sku.listPrice} · q{sku.quality.toFixed(2)} · {pkgLabel} · {chCount === 0 ? <span style={{ color: C.red }}>not distributed</span> : `${chCount} channel${chCount > 1 ? "s" : ""}`}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button style={{ ...ctrlBtn, background: world.brand.color, color: "#06121c", flex: 1 }} onClick={() => produce(si, 60000)}>+ Make 60k ({fmtMoney(60000 * sku.unitCost)})</button>
+                <button style={{ ...ctrlBtn, background: C.violet, color: "#fff", flex: 1 }} onClick={() => produce(si, 60000)}>+ Make 60k ({fmtMoney(60000 * sku.unitCost)})</button>
                 <button style={{ ...ctrlBtn, flex: 1 }} onClick={() => openDistribution(si)}>Distribution / Sales</button>
               </div>
             </div>
           );
         })}
-        <button style={{ ...bigBtn, background: world.brand.color, width: "100%", marginTop: 4 }} onClick={openCreator}>+ Launch a new product</button>
+        <button style={{ ...bigBtn, background: C.violet, width: "100%", marginTop: 4 }} onClick={openCreator}>+ Launch a new product</button>
       </Panel>
       <Panel title="Distribution Contracts" style={{ flex: "1 1 300px" }}>
         {world.player.contracts.length === 0 && <div style={{ color: C.faint, marginBottom: 10, fontSize: 13 }}>No channels yet — you can't reach buyers. Negotiate a contract.</div>}
@@ -63,7 +63,7 @@ export function OperationsView({ world, produce, openCreator, openContract, remo
         ) : (
           <div style={{ display: "flex", gap: 3, background: C.panel2, borderRadius: 7, padding: 3, flexWrap: "wrap", marginBottom: 6 }}>
             {["all", ...AXES.age].map((o) => (
-              <button key={o} onClick={() => setFocus(o)} style={{ background: world.player.marketingFocus === o ? C.cyan : "transparent", color: world.player.marketingFocus === o ? "#06121c" : C.dim, border: "none", borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{o === "all" ? "All" : o}</button>
+              <button key={o} onClick={() => setFocus(o)} style={{ background: world.player.marketingFocus === o ? C.cyan : "transparent", color: world.player.marketingFocus === o ? "#fff" : C.dim, border: "none", borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{o === "all" ? "All" : o}</button>
             ))}
           </div>
         )}
@@ -109,7 +109,7 @@ export function IntelligenceView({ world, commission }: { world: World; commissi
             <div key={type} style={{ marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${C.grid}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ color: C.ink, fontWeight: 600 }}>{def.label}</span>
-                <button onClick={() => commission(type)} disabled={!!inflight} style={{ background: inflight ? C.grid : C.cyan, color: inflight ? C.faint : "#06121c", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: inflight ? "default" : "pointer" }}>{inflight ? `…${inflight.ticksLeft}t` : fmtMoney(def.cost)}</button>
+                <button onClick={() => commission(type)} disabled={!!inflight} style={{ background: inflight ? C.grid : C.cyan, color: inflight ? C.faint : "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: inflight ? "default" : "pointer" }}>{inflight ? `…${inflight.ticksLeft}t` : fmtMoney(def.cost)}</button>
               </div>
               <div style={{ color: C.dim, fontSize: 12, marginTop: 4 }}>{def.blurb}</div>
               {done && <div style={{ color: C.faint, fontSize: 10, marginTop: 3 }}>last run: Q{Math.floor(done.asOfTick / TICKS_PER_QUARTER)}</div>}
@@ -193,7 +193,7 @@ function DeptSelector({ label, tier, onChange }: { label: string; tier: DeptTier
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {DEPT_TIERS.map((d) => (
           <button key={d.tier} onClick={() => onChange(d.tier)}
-            style={{ background: tier === d.tier ? C.cyan : C.panel2, color: tier === d.tier ? "#06121c" : C.dim, border: `1px solid ${tier === d.tier ? C.cyan : C.line}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer", flex: "1 1 0" }}>
+            style={{ background: tier === d.tier ? C.cyan : C.panel2, color: tier === d.tier ? "#fff" : C.dim, border: `1px solid ${tier === d.tier ? C.cyan : C.line}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer", flex: "1 1 0" }}>
             <div style={{ fontWeight: 600 }}>{d.label}</div>
             {d.cost > 0 && <div style={{ fontSize: 10, opacity: 0.8 }}>{fmtMoney(d.cost)}/Q</div>}
           </button>

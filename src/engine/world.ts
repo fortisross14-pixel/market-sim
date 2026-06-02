@@ -33,9 +33,9 @@ export function initWorld(industryId: string, company: string, brand: Brand, sta
   return {
     industryId, cfg, tick: 0, company, brand, cube, comps,
     player: {
-      skus: [], contracts: [], marketing: 60000, marketingTarget: 60000, marketingFocus: "all",
+      skus: [], contracts: [], marketing: 0, marketingTarget: 0, marketingFocus: "all",
       brandMarketing: 0, brandMarketingTarget: 0,
-      backOffice: 70000, backOfficeTarget: 70000, cash: startCash, debt: 0, lostSales: 0, receivables: [],
+      backOffice: 20000, backOfficeTarget: 20000, cash: startCash, debt: 0, lostSales: 0, receivables: [],
       financeDept: 0, intelDept: 0,
       locations: [
         { id: "off0", type: "office", tier: 0, monthlyCost: 8_000 },

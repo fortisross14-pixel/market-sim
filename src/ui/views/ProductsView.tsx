@@ -52,7 +52,7 @@ export function ProductsView({ world, produce, setProductPrice, setProductQualit
             <div style={{ color: C.dim, fontSize: 12, marginBottom: 6 }}>
               Products: {skus.length}/{whCap} (warehouse) · PMs: {pms} ({pms * 2} product slots)
             </div>
-            <button style={{ ...bigBtn, background: check.ok ? world.brand.color : C.line, color: check.ok ? "#06121c" : C.faint, width: "100%" }}
+            <button style={{ ...bigBtn, background: check.ok ? C.violet : C.line, color: check.ok ? "#fff" : C.faint, width: "100%" }}
               disabled={!check.ok} onClick={openCreator}>
               + Design a new product
             </button>
@@ -113,7 +113,7 @@ function ProductCard({ world, si, sku, live, produce, setProductPrice, setProduc
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: affordable ? C.dim : C.red, marginBottom: 8 }}>
           <span>Cost: {fmtMoney(batchCost)}</span><span>Cash: {fmtMoney(world.player.cash)}</span>
         </div>
-        <button style={{ ...bigBtn, background: affordable ? world.brand.color : C.line, color: affordable ? "#06121c" : C.faint, width: "100%" }}
+        <button style={{ ...bigBtn, background: affordable ? C.violet : C.line, color: affordable ? "#fff" : C.faint, width: "100%" }}
           disabled={!affordable} onClick={() => produce(si, batch)}>
           Manufacture {fmtNum(batch)} units (~{Math.max(3, Math.round(batch / 5000))}d)
         </button>
@@ -187,7 +187,7 @@ function ProductCard({ world, si, sku, live, produce, setProductPrice, setProduc
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: affordable ? C.dim : C.red, marginBottom: 8 }}>
             <span>Cost: {fmtMoney(batchCost)}</span><span>Cash: {fmtMoney(world.player.cash)}</span>
           </div>
-          <button style={{ ...bigBtn, background: affordable ? world.brand.color : C.line, color: affordable ? "#06121c" : C.faint, width: "100%" }}
+          <button style={{ ...bigBtn, background: affordable ? C.violet : C.line, color: affordable ? "#fff" : C.faint, width: "100%" }}
             disabled={!affordable} onClick={() => produce(si, batch)}>
             Manufacture {fmtNum(batch)} units
           </button>

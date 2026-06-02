@@ -293,10 +293,10 @@ export interface Vision {
   quartersPassed: number;     // how many full quarters since setTick (max 4)
 }
 
-export const VISION_GOALS: Record<VisionGoal, { label: string; adjective: string; bonusType: string; bonusMax: number; desc: string }> = {
-  quality:     { label: "Quality",     adjective: "best",       bonusType: "quality",     bonusMax: 0.15, desc: "+15% design quality at full ramp" },
-  sales:       { label: "Sales",       adjective: "most sold",  bonusType: "sales",       bonusMax: 0.20, desc: "+20% demand at full ramp" },
-  recognition: { label: "Recognition", adjective: "most valued", bonusType: "recognition", bonusMax: 0.25, desc: "+25% brand equity gain at full ramp" },
+export const VISION_GOALS: Record<VisionGoal, { label: string; adjective: string; bonusType: string; bonusMaxIndustry: number; bonusMaxProduct: number; desc: string }> = {
+  quality:     { label: "Quality",     adjective: "best",       bonusType: "quality",     bonusMaxIndustry: 0.10, bonusMaxProduct: 0.20, desc: "design quality" },
+  sales:       { label: "Sales",       adjective: "most sold",  bonusType: "sales",       bonusMaxIndustry: 0.10, bonusMaxProduct: 0.20, desc: "demand" },
+  recognition: { label: "Recognition", adjective: "most valued", bonusType: "recognition", bonusMaxIndustry: 0.10, bonusMaxProduct: 0.20, desc: "brand equity gain" },
 };
 
 export type DeptTier = 0 | 1 | 2 | 3; // 0=none, 1=small, 2=medium, 3=large

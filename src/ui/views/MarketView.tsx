@@ -25,12 +25,12 @@ export function MarketView({ world, hist, selectCell }:
       <Panel title="Your Market Share" style={{ marginBottom: 16 }}>
         {world.live && (
           <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-            <SharePill label="Today" value={world.live.overallShare} color={world.brand.color} />
-            <SharePill label="This month" value={world.live.shareMonth} color={world.brand.color} />
-            <SharePill label="This year" value={world.live.shareYear} color={world.brand.color} />
+            <SharePill label="Today" value={world.live.overallShare} color={C.violet} />
+            <SharePill label="This month" value={world.live.shareMonth} color={C.violet} />
+            <SharePill label="This year" value={world.live.shareYear} color={C.violet} />
           </div>
         )}
-        <LineChart series={[{ data: hist.map((h) => h.share), color: world.brand.color }]} fmt={fmtPct} markers={markers} />
+        <LineChart series={[{ data: hist.map((h) => h.share), color: C.violet }]} fmt={fmtPct} markers={markers} />
         <div style={{ color: C.dim, fontSize: 12, marginTop: 6 }}>Daily share spikes when you sell and drops to zero when you're out of stock. Month/year smooth that out — a product that sells out mid-period can still post a strong annual share.</div>
       </Panel>
       <CubeInspector world={world} selectCell={selectCell} />
@@ -107,7 +107,7 @@ function CubeInspector({ world, selectCell }: { world: World; selectCell: (c: Co
               {info.breakdown.length === 0 ? <div style={{ color: C.faint, fontSize: 12 }}>Largely unserved — a potential niche.</div> :
                 info.breakdown.map((b: any, i: number) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                    <span style={{ color: b.isComp ? C.dim : world.brand.color }}>{b.name}{b.isComp ? "" : " (you)"}</span>
+                    <span style={{ color: b.isComp ? C.dim : C.violet }}>{b.name}{b.isComp ? "" : " (you)"}</span>
                     <span style={{ fontFamily: "ui-monospace", color: C.ink }}>{fmtPct(b.share)}</span>
                   </div>
                 ))}

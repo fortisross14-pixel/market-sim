@@ -33,8 +33,8 @@ export const Stat = ({ label, value, color = C.ink, delta }: { label: string; va
 );
 
 export const Panel = ({ title, children, style }: { title?: string; children: React.ReactNode; style?: React.CSSProperties }) => (
-  <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16, marginBottom: 16, ...style }}>
-    {title && <div style={{ color: C.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>{title}</div>}
+  <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 14, padding: 20, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", ...style }}>
+    {title && <div style={{ color: C.ink, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{title}</div>}
     {children}
   </div>
 );
@@ -75,7 +75,7 @@ export const Row = ({ k, v, strong, indent }: { k: string; v: string; strong?: b
 export const Seg = ({ label, opts, val, set }: { label: string; opts: string[]; val: string; set: (v: string) => void }) => (
   <div><div style={{ color: C.faint, fontSize: 10, marginBottom: 4 }}>{label}</div>
     <div style={{ display: "flex", gap: 3, background: C.panel2, borderRadius: 7, padding: 3, flexWrap: "wrap" }}>
-      {opts.map((o) => <button key={o} onClick={() => set(o)} style={{ background: val === o ? C.cyan : "transparent", color: val === o ? "#06121c" : C.dim, border: "none", borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{o}</button>)}
+      {opts.map((o) => <button key={o} onClick={() => set(o)} style={{ background: val === o ? C.cyan : "transparent", color: val === o ? "#fff" : C.dim, border: "none", borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{o}</button>)}
     </div>
   </div>
 );

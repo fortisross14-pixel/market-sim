@@ -50,7 +50,7 @@ export function SegmentsView({ world, saveSegment, deleteSegment, updateSegment,
                 const on = (filter[axis] ?? []).includes(val);
                 return (
                   <button key={val} onClick={() => toggle(axis, val)}
-                    style={{ background: on ? C.cyan : C.panel2, color: on ? "#06121c" : C.dim, border: `1px solid ${on ? C.cyan : C.line}`, borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                    style={{ background: on ? C.cyan : C.panel2, color: on ? "#fff" : C.dim, border: `1px solid ${on ? C.cyan : C.line}`, borderRadius: 5, padding: "4px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                     {val}
                   </button>
                 );
@@ -96,7 +96,7 @@ export function SegmentsView({ world, saveSegment, deleteSegment, updateSegment,
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => setFocus(targeted ? "all" : "seg:" + seg.id)}
-                  style={{ ...ctrlBtn, background: targeted ? C.cyan : C.panel, color: targeted ? "#06121c" : C.dim, flex: 1 }}>
+                  style={{ ...ctrlBtn, background: targeted ? C.cyan : C.panel, color: targeted ? "#fff" : C.dim, flex: 1 }}>
                   {targeted ? "✓ Marketing focus" : "Target marketing here"}
                 </button>
                 <button style={ctrlBtn} onClick={() => startEdit(seg)}>Edit</button>

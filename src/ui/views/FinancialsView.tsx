@@ -119,7 +119,7 @@ export function FinancialsView({ world, hist, borrow, repay }:
       {/* Tier 2+: Contribution by Cell */}
       {tier >= 2 && (
         <Panel title="Contribution by Customer Cell — not all customers are equally valuable">
-          <CellContributionTable cells={live.cellFinance} brandColor={world.brand.color} />
+          <CellContributionTable cells={live.cellFinance} brandColor={C.violet} />
         </Panel>
       )}
 
