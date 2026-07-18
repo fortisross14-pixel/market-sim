@@ -44,6 +44,10 @@ export function initWorld(industryId: string, company: string, brand: Brand, sta
       personnel: [],
       expertise: { industry: {}, category: {} },
       vision: null,
+      operatingRooms: [
+        { id: "founder-office", kind: "office", x: 21, y: 20, w: 4, h: 4, name: "Founder's Office", team: "product", productKey: null, skuId: null, assignedPersonnelIds: [], buildCost: 0, monthlyCost: 8_000, capacity: 4 },
+        { id: "starter-warehouse", kind: "warehouse", x: 27, y: 22, w: 5, h: 5, name: "Starter Warehouse", team: "operations", productKey: null, skuId: null, assignedPersonnelIds: [], buildCost: 0, monthlyCost: 5_000, capacity: 30_000 },
+      ],
     },
     studies: [], revealed: {}, history: [], events: [],
     pendingShockTick: 80 + Math.floor(Math.random() * 80), shock: null,

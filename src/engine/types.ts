@@ -365,6 +365,23 @@ export interface Expertise {
   category: Record<string, number>; // product key -> 0..5
 }
 
+
+export type OperatingRoomKind = "office" | "factory" | "warehouse" | "outsourcing";
+export type OperatingTeamKind = "unassigned" | "product" | "marketing" | "finance" | "sales" | "operations" | "strategy";
+export interface OperatingRoom {
+  id: string;
+  kind: OperatingRoomKind;
+  x: number; y: number; w: number; h: number;
+  name: string;
+  team: OperatingTeamKind;
+  productKey: string | null;
+  skuId: string | null;
+  assignedPersonnelIds: string[];
+  buildCost: number;
+  monthlyCost: number;
+  capacity: number; // factory units/month; warehouse units; office seats; outsourcing supplier capacity
+}
+
 export interface PlayerState {
   skus: SKU[];
   contracts: Contract[];
@@ -386,6 +403,7 @@ export interface PlayerState {
   personnel: Personnel[];
   expertise: Expertise;
   vision: Vision | null;
+  operatingRooms: OperatingRoom[];
 }
 
 export const DEPT_TIERS: { tier: DeptTier; label: string; cost: number; detail: string }[] = [

@@ -6,7 +6,7 @@ import { initWorld, buildSku, STUDY_DEFS, type ProductSpec } from "../engine/wor
 import { step } from "../engine/tick";
 import { launchInheritance } from "../engine/brandEquity";
 import { deriveUnitCost } from "../engine/economics";
-import { canCreateProduct, warehouseCapacity } from "../engine/capacity";
+import { canCreateProduct, warehouseCapacity, canProduce, factoryCapacity, outsourcingCapacity } from "../engine/capacity";
 
 export function useGame() {
   const worldRef = useRef<World | null>(null);
@@ -48,10 +48,14 @@ export function useGame() {
     const w = worldRef.current!;
     const check = canCreateProduct(w);
     if (!check.ok) return;
+    const mandatedRooms = w.player.operatingRooms.filter(r => r.kind === "office" && r.team === "product" && r.productKey === spec.productKey);
+    if (!mandatedRooms.length) return;
     const id = "P" + w.player.skus.length;
     // find best AVAILABLE PM (not locked to a designing product)
     const lockedPmIds = new Set(w.player.skus.filter((s) => s.status === "designing" && s.assignedPmId).map((s) => s.assignedPmId));
-    const availablePms = w.player.personnel.filter((p) => p.role === "product_manager" && !lockedPmIds.has(p.id));
+    const productRooms = w.player.operatingRooms.filter((r) => r.kind === "office" && r.team === "product" && r.productKey === spec.productKey);
+    const seated = new Set(productRooms.flatMap((r) => r.assignedPersonnelIds));
+    const availablePms = w.player.personnel.filter((p) => p.role === "product_manager" && seated.has(p.id) && !lockedPmIds.has(p.id));
     const bestPm = availablePms.sort((a, b) => b.skill - a.skill)[0];
     if (!bestPm) return; // no available PM
     const expertise = Math.max(w.player.expertise.category[spec.productKey] ?? 0, w.player.expertise.industry[w.cfg.id] ?? 0);
@@ -69,12 +73,14 @@ export function useGame() {
     const whCap = warehouseCapacity(w);
     const activeLines = w.player.skus.filter((sk) => sk.status === "active" || sk.status === "manufacturing").length;
     if (s.status === "designed" && activeLines >= whCap) return; // no room for a new product line
+    const check = canProduce(w, qty, s.unitCost, s.method);
+    if (!check.ok) return;
     const cost = qty * s.unitCost;
-    if (w.player.cash < cost) return;
     w.player.cash -= cost;
     s.mfgBatchSize = qty;
-    // manufacturing time: ~1 day per 5k units, min 3 days, max 60
-    s.mfgDaysLeft = Math.min(60, Math.max(3, Math.round(qty / 5000)));
+    const monthlyCap = s.method === "own" ? factoryCapacity(w).total : outsourcingCapacity(w);
+    // capacity-driven lead time: one month at full utilization, minimum 3 days
+    s.mfgDaysLeft = Math.min(90, Math.max(3, Math.ceil((qty / Math.max(1, monthlyCap)) * 30)));
     s.status = "manufacturing";
     // on first manufacture, apply launch inheritance (brand credibility)
     if (s.launchTick === 0) {
@@ -135,6 +141,11 @@ export function useGame() {
 
   const signContract = useCallback((partnerId: string) => {
     const w = worldRef.current!;
+    const commercialRooms = w.player.operatingRooms.filter(r => r.kind === "outsourcing" || (r.kind === "office" && r.team === "sales"));
+    if (!commercialRooms.length) return;
+    const assigned = new Set(commercialRooms.flatMap(r => r.assignedPersonnelIds));
+    const hasCommercialStaff = w.player.personnel.some(p => (p.role === "operations" || p.role === "strategy") && assigned.has(p.id));
+    if (!hasCommercialStaff && !commercialRooms.some(r => r.kind === "outsourcing")) return;
     const partner = RETAIL_PARTNERS.find((p) => p.id === partnerId);
     if (!partner) return;
     // don't sign with the same partner twice
@@ -195,6 +206,7 @@ export function useGame() {
   const firePersonnel = useCallback((id: string) => {
     const w = worldRef.current!;
     w.player.personnel = w.player.personnel.filter((p) => p.id !== id);
+    for (const room of w.player.operatingRooms) room.assignedPersonnelIds = room.assignedPersonnelIds.filter(pid => pid !== id);
     rerender();
   }, [rerender]);
   const setVision = useCallback((goal: import("../engine/types").VisionGoal, scope: string, audience: string, audienceLabel: string) => {
@@ -250,6 +262,16 @@ export function useGame() {
     rerender();
   }, [rerender]);
 
+  const updateOperatingRooms = useCallback((rooms: World["player"]["operatingRooms"]) => {
+    const w = worldRef.current!;
+    w.player.operatingRooms = rooms;
+    const financeSeats = rooms.filter(r => r.kind === "office" && r.team === "finance").reduce((a,r)=>a+r.assignedPersonnelIds.length,0);
+    const strategySeats = rooms.filter(r => r.kind === "office" && r.team === "strategy").reduce((a,r)=>a+r.assignedPersonnelIds.length,0);
+    w.player.financeDept = financeSeats >= 5 ? 3 : financeSeats >= 3 ? 2 : financeSeats >= 1 ? 1 : 0;
+    w.player.intelDept = strategySeats >= 5 ? 3 : strategySeats >= 3 ? 2 : strategySeats >= 1 ? 1 : 0;
+    rerender();
+  }, [rerender]);
+
   return {
     world: worldRef.current, phase, setPhase, playing, setPlaying, speed, setSpeed, modal, setModal,
     distSku, openDistribution: (si: number) => { setDistSku(si); setModal("distribution"); },
@@ -257,6 +279,6 @@ export function useGame() {
     setPackaging, setProductPrice, setProductQuality, setLicense, toggleProductChannel,
     setMarketing, setBrandMarketing, setBackOffice, setFinanceDept, setIntelDept, setFocus, selectCell, commission, borrow, repay,
     saveSegment, deleteSegment, updateSegment, launchCampaign,
-    rentLocation, upgradeLocation, hirePersonnel, firePersonnel, setVision,
+    rentLocation, upgradeLocation, hirePersonnel, firePersonnel, setVision, updateOperatingRooms,
   };
 }

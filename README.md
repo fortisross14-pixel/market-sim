@@ -75,3 +75,33 @@ with Product Diagnosis, brand equity, full competitor AI, and strategy reports.
 Next (roadmap order): Capital Allocation + Investments (factories, automation, R&D,
 flagship builds). Also queued: deliberate market growth (category-building
 marketing gated by your share).
+
+## Visual company-map POC
+
+The Management → Company Map tab adds a 48×48 isometric operating layer:
+
+- Build offices, factories, warehouses, and sourcing offices.
+- Assign office teams (Product Management, Marketing, Finance, Sales, Operations, Strategy).
+- Give Product Management offices a category mandate from the selected industry's product catalog.
+- Link a room mandate to an SKU already created in the core simulation, or open the existing Product Creator.
+- See each product's operating chain from concept → make/buy → inventory → route to market.
+- Surface management blockers when capabilities or departments are missing.
+
+This POC keeps the physical-layout state local to the map view. The next architectural step is moving rooms/teams into the engine's `PlayerState` so rent, salaries, capacity, lead times, product development, and operating constraints directly affect `tick.ts`.
+
+## Visual operating-model integration (v0.20 POC)
+
+The 48×48 Company Map is now part of the authoritative simulation state rather than a local visual mockup.
+
+- Building a room consumes company cash and creates monthly operating expense.
+- Product creation requires a Product Management office with the matching category mandate and an assigned Product Manager.
+- Product design speed depends on the assigned PM's skill and whether they are seated in the correct room.
+- Owned production requires factory capacity; outsourced production requires Sourcing Office capacity.
+- Manufacturing batch size and lead time are capacity-driven.
+- Warehouses cap total finished goods plus work-in-process inventory in units.
+- Marketing spend only executes when a marketing employee is assigned to a Marketing office.
+- Retail contracts require a Sales office or Sourcing Office operating capability.
+- Finance and strategy room staffing automatically unlocks the corresponding reporting/intelligence tiers.
+- Employees can be assigned contextually from the map, and firing an employee removes their room assignment.
+
+This remains a POC: room upgrades, multiple factory technologies, supplier negotiation, employee movement, and save/load migration are logical next steps.

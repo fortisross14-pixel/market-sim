@@ -43,7 +43,9 @@ export function step(w: World): World {
   // ease player spend toward targets
   w.player.marketing = ease(w.player.marketing, w.player.marketingTarget, 0.08);
   // marketing requires marketing personnel — no team, no spend
-  const hasMarketingTeam = w.player.personnel.some((p) => p.role === "marketing");
+  const marketingRooms = w.player.operatingRooms.filter(r => r.kind === "office" && r.team === "marketing");
+  const seatedMarketing = new Set(marketingRooms.flatMap(r => r.assignedPersonnelIds));
+  const hasMarketingTeam = w.player.personnel.some((p) => p.role === "marketing" && seatedMarketing.has(p.id));
   if (!hasMarketingTeam) { w.player.marketing = 0; w.player.brandMarketing = 0; }
   w.player.brandMarketing = ease(w.player.brandMarketing, w.player.brandMarketingTarget, 0.08);
   w.player.backOffice = ease(w.player.backOffice, w.player.backOfficeTarget, 0.08);
@@ -101,7 +103,10 @@ export function step(w: World): World {
   // ---- design & manufacturing timers ----
   for (const p of w.player.skus) {
     if (p.status === "designing") {
-      p.designDaysLeft = Math.max(0, p.designDaysLeft - 1);
+      const pmRoom = w.player.operatingRooms.find(r => r.kind === "office" && r.team === "product" && r.assignedPersonnelIds.includes(p.assignedPmId ?? ""));
+      const pm = w.player.personnel.find(x => x.id === p.assignedPmId);
+      const designSpeed = pmRoom && pm ? 0.75 + pm.skill * 0.75 : 0.25;
+      p.designDaysLeft = Math.max(0, p.designDaysLeft - designSpeed);
       if (p.designDaysLeft <= 0) {
         p.status = "designed";
         // PM is freed (assignedPmId stays for reference but they're no longer locked)
@@ -372,7 +377,8 @@ export function step(w: World): World {
   const deptOverhead = (DEPT_TIERS.find((d) => d.tier === w.player.financeDept)?.cost ?? 0)
                      + (DEPT_TIERS.find((d) => d.tier === w.player.intelDept)?.cost ?? 0);
   // location rent (monthly, prorated to quarterly)
-  const locationCost = w.player.locations.reduce((a, loc) => a + loc.monthlyCost * 3, 0);
+  const roomCost = (w.player.operatingRooms ?? []).reduce((a, room) => a + room.monthlyCost * 3, 0);
+  const locationCost = roomCost || w.player.locations.reduce((a, loc) => a + loc.monthlyCost * 3, 0);
   // personnel salaries (monthly, prorated to quarterly)
   const personnelCost = w.player.personnel.reduce((a, p) => a + p.salary * 3, 0);
   // licensing: annual fee (per quarter) + per-unit royalty on actual units sold

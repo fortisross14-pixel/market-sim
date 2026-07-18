@@ -13,6 +13,7 @@ import { BrandView } from "./views/BrandView";
 import { CustomersView } from "./views/CustomersView";
 import { LocationsView } from "./views/LocationsView";
 import { PersonnelView } from "./views/PersonnelView";
+import { CompanyMapView } from "./views/CompanyMapView";
 import { POSITIONINGS, MARKETING_AGENCIES } from "../engine/industries";
 import { TICKS_PER_QUARTER, DAYS_PER_MONTH } from "../engine/types";
 import { useGame } from "../state/useGame";
@@ -27,6 +28,7 @@ interface TopTab { id: string; label: string; icon: string; subs: SubTab[]; }
 
 const STRUCTURE: TopTab[] = [
   { id: "mgmt", label: "Management", icon: "🏢", subs: [
+    { id: "hq", label: "Company Map" },
     { id: "locations", label: "Locations" },
     { id: "personnel", label: "Personnel" },
     { id: "strategy", label: "Strategy" },
@@ -52,7 +54,7 @@ const STRUCTURE: TopTab[] = [
 export function Game() {
   const g = useGame();
   const [topTab, setTopTab] = useState("mgmt");
-  const [subTabs, setSubTabs] = useState<Record<string, string>>({ mgmt: "locations", ops: "products", fin: "overview", mkt: "customers" });
+  const [subTabs, setSubTabs] = useState<Record<string, string>>({ mgmt: "hq", ops: "products", fin: "overview", mkt: "customers" });
   const [seenEvents, setSeenEvents] = useState(0);
 
   const setSub = (sub: string) => setSubTabs((s) => ({ ...s, [topTab]: sub }));
@@ -130,6 +132,7 @@ export function Game() {
       {/* ---- content ---- */}
       <div style={{ padding: "16px 20px 40px" }}>
         {/* ======== MANAGEMENT ======== */}
+        {topTab === "mgmt" && sub === "hq" && <CompanyMapView world={w} openCreator={() => g.setModal("creator")} updateRooms={g.updateOperatingRooms} />}
         {topTab === "mgmt" && sub === "locations" && <LocationsView world={w} rentLocation={g.rentLocation} upgradeLocation={g.upgradeLocation} />}
         {topTab === "mgmt" && sub === "personnel" && <PersonnelView world={w} hirePersonnel={g.hirePersonnel} firePersonnel={g.firePersonnel} setFinanceDept={g.setFinanceDept} setIntelDept={g.setIntelDept} />}
         {topTab === "mgmt" && sub === "strategy" && (
